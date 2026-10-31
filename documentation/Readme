@@ -1,0 +1,215 @@
+# BookFlow
+
+This repository is for the XPRTZ code assignment **XPRTZ Code Opdracht 2025**. The assignment describes BookFlow, a platform intended to connect authors, publishers, and distributors and modernize the process from manuscript submission through publication and distribution.
+
+The brief focuses on managing book and manuscript information, coordinating publishing workflows, integrating with external services reliably, sending real-time updates, and building a scalable system with automated tests.
+
+## Original assignment
+
+The original assignment PDF is available at [XPRTZ Code Opdracht 2025.pdf](../XPRTZ%20Code%20Opdracht%202025.pdf).
+
+## Conceptual class diagram
+
+```mermaid
+classDiagram
+	class Author {
+		+string Id
+		+string Name
+	}
+	class Editor {
+		+string Id
+		+string Name
+	}
+	class Publisher {
+		+string Id
+		+string Name
+	}
+	class Manuscript {
+		+string Id
+		+string Title
+		+ManuscriptStatus Status
+		+DateTime SubmittedAt
+	}
+	class ManuscriptVersion {
+		+string Id
+		+int VersionNumber
+		+string BlobUri
+		+DateTime CreatedAt
+	}
+	class ManuscriptMetadata {
+		+string Id
+	}
+	class ManuscriptHighlight {
+		+int StartOffset
+		+int EndOffset
+		+string OriginalText
+		+string EditedText
+	}
+	class AuthorFeedback {
+		+string Id
+		+string Comment
+		+DateTime SubmittedAt
+	}
+	class Book {
+		+string Id
+		+string ISBN
+		+string Title
+	}
+	class Distributor {
+		+string Id
+		+string Name
+	}
+	class StockRecord {
+		+int AvailableQuantity
+		+DateTime UpdatedAt
+	}
+
+	Author "1" --> "0..*" Manuscript : submits
+	Editor "0..1" --> "0..*" Manuscript : reviews
+	Manuscript "1" *-- "1" ManuscriptMetadata : metadata
+	Manuscript "1" *-- "1..*" ManuscriptVersion : versions
+	ManuscriptVersion "1" <-- "0..*" ManuscriptVersion : based on original
+	ManuscriptMetadata "1" *-- "0..*" ManuscriptHighlight : stores highlights
+	ManuscriptVersion "1" --> "0..*" ManuscriptHighlight : changes in version
+	Author "1" --> "0..*" AuthorFeedback : submits
+	ManuscriptMetadata "1" *-- "0..*" AuthorFeedback : stores feedback
+	ManuscriptVersion "1" --> "0..*" AuthorFeedback : receives response
+	Manuscript "1" --> "0..1" Book : approved as
+	Publisher "1" --> "0..*" Book : publishes
+	Book "1" --> "0..*" StockRecord : availability
+	Distributor "1" --> "0..*" StockRecord : reports
+```
+
+## New manuscript upload workflow
+
+When an author uploads a manuscript, the Web App stores the file in Blob Storage and manages manuscript and user metadata in SQL Database. Blob Storage sends an upload event to Event Grid, which routes it to the editor-assignment service. The service assigns an editor, saves the assignment, and publishes an `EditorAssigned` event that Event Grid routes to the email service.
+
+```mermaid
+flowchart LR
+	Author([Author]) -->|Uploads manuscript| WebApp
+
+	subgraph Azure[Microsoft Azure]
+		WebApp[Web App]
+		BlobStorage[(Blob Storage)]
+		EventGrid{{Event Grid}}
+		EditorAssignmentService[Editor assignment service<br/>Assigns an editor]
+		SqlDatabase[(SQL Database)]
+
+		WebApp -->|Stores manuscript file| BlobStorage
+		BlobStorage -->|Manuscript uploaded event| EventGrid
+		EventGrid -->|Routes upload event| EditorAssignmentService
+		EditorAssignmentService -->|Persists editor assignment| SqlDatabase
+		EditorAssignmentService -->|Publishes EditorAssigned event| EventGrid
+		WebApp <-->|Reads and writes manuscript and user metadata| SqlDatabase
+	end
+
+	EmailService[Email service]
+	Editor([Assigned editor])
+	EventGrid -->|Routes EditorAssigned event| EmailService
+	EmailService -->|Delivers notification| Editor
+```
+
+## Manuscript proofreading workflow
+
+The editor opens the manuscript in the Web App, highlights and edits the text, and saves the result as a new Blob Storage version linked to the original. The Web App stores the highlights and version relationship in SQL Database, then publishes a `ManuscriptEdited` event to Event Grid. Event Grid routes it to an independently deployed author-notification service that looks up the author and updated-version link, then sends an email notification. The author follows the link to read the edited manuscript in the Web App, respond to the changes, and upload a revised version linked to the editor's version. The Web App stores the author's feedback and new version metadata, then publishes a `ManuscriptRevised` event. Event Grid routes that event to an independent editor-notification service, which emails the editor a link to the revised manuscript.
+
+```mermaid
+flowchart LR
+	Editor([Editor]) -->|Reviews and highlights manuscript| WebApp
+
+	subgraph Azure[Microsoft Azure]
+		WebApp[Web App]
+		BlobStorage[(Blob Storage)]
+		SqlDatabase[(SQL Database)]
+		EventGrid{{Event Grid}}
+		AuthorNotificationService[Author notification service]
+		EditorNotificationService[Editor notification service]
+
+		WebApp -->|Loads original manuscript| BlobStorage
+		WebApp -->|Stores edited version linked to original| BlobStorage
+		WebApp -->|Stores highlights and version metadata| SqlDatabase
+		WebApp -->|Publishes ManuscriptEdited event| EventGrid
+		EventGrid -->|Routes ManuscriptEdited event| AuthorNotificationService
+		AuthorNotificationService -->|Looks up author and updated-version link| SqlDatabase
+		WebApp -->|Stores author feedback and revised-version metadata| SqlDatabase
+		WebApp -->|Stores revised version linked to editor's version| BlobStorage
+		WebApp -->|Publishes ManuscriptRevised event| EventGrid
+		EventGrid -->|Routes ManuscriptRevised event| EditorNotificationService
+		EditorNotificationService -->|Looks up editor and revised-version link| SqlDatabase
+	end
+
+	EmailService[Email service]
+	Author([Author])
+	Editor([Editor])
+	AuthorNotificationService -->|Sends email with Web App link| EmailService
+	EmailService -->|Delivers edited-manuscript notification| Author
+	Author -->|Opens updated manuscript link| WebApp
+	Author -->|Responds to edits and uploads revision| WebApp
+	EditorNotificationService -->|Sends email with revised-manuscript link| EmailService
+	EmailService -->|Delivers revision notification| Editor
+```
+
+## Manuscript approval workflow
+
+When the editor approves a manuscript in the Web App, the approval status is saved in SQL Database and a `ManuscriptApproved` event is published to Event Grid. Event Grid routes the event to independently deployed services: one submits a print demand to the PrintOnDemand API, one emails the author that the manuscript is approved, and one notifies publisher APIs that the new book is available.
+
+```mermaid
+flowchart LR
+	Editor([Editor]) -->|Approves manuscript| WebApp
+
+	subgraph Azure[Microsoft Azure]
+		WebApp[Web App]
+		SqlDatabase[(SQL Database)]
+		EventGrid{{Event Grid}}
+		PrintDemandService[Print demand service]
+		AuthorApprovalNotificationService[Author approval notification service]
+		PublisherAvailabilityService[Publisher availability service]
+
+		WebApp -->|Stores approval status| SqlDatabase
+		WebApp -->|Publishes ManuscriptApproved event| EventGrid
+		EventGrid -->|Routes approval event| PrintDemandService
+		EventGrid -->|Routes approval event| AuthorApprovalNotificationService
+		EventGrid -->|Routes approval event| PublisherAvailabilityService
+	end
+
+	PrintOnDemandAPI[PrintOnDemand API]
+	EmailService[Email service]
+	PublisherAPIs[Publisher APIs]
+	Author([Author])
+	PrintDemandService -->|Requests manuscript printing| PrintOnDemandAPI
+	AuthorApprovalNotificationService -->|Sends approval email| EmailService
+	EmailService -->|Delivers approval notification| Author
+	PublisherAvailabilityService -->|Notifies new book is available| PublisherAPIs
+```
+
+## Publisher print order workflow
+
+The publisher uses the Web App to check book availability and requests a print quantity for a selected distributor. The Web App records the order and publishes a `PrintOrderRequested` event to Event Grid. Event Grid routes the event to the print-order service, which submits the title and quantity to the PrintOnDemand API. When the books are delivered, PrintOnDemand publishes a `BooksDelivered` event to Event Grid. The distributor then updates its stock and publishes a `StockUpdated` event. Event Grid routes both events to the inventory service, which updates the stock data used by the Web App.
+
+```mermaid
+flowchart LR
+	Publisher([Publisher]) -->|Checks availability and requests print quantity| WebApp
+
+	subgraph Azure[Microsoft Azure]
+		WebApp[Web App]
+		SqlDatabase[(SQL Database)]
+		EventGrid{{Event Grid}}
+		PrintOrderService[Print order service]
+		InventoryService[Inventory service]
+
+		WebApp <-->|Reads book availability| SqlDatabase
+		WebApp -->|Stores title, quantity, and distributor| SqlDatabase
+		WebApp -->|Publishes PrintOrderRequested event| EventGrid
+		EventGrid -->|Routes print order event| PrintOrderService
+		EventGrid -->|Routes BooksDelivered and StockUpdated events| InventoryService
+		InventoryService -->|Updates stock and availability| SqlDatabase
+	end
+
+	PrintOnDemandAPI[PrintOnDemand API]
+	Distributor([Distributor])
+	PrintOrderService -->|Submits title and quantity to print| PrintOnDemandAPI
+	PrintOnDemandAPI -->|Delivers printed books| Distributor
+	PrintOnDemandAPI -->|Publishes BooksDelivered event| EventGrid
+	Distributor -->|Publishes StockUpdated event| EventGrid
+```
+
