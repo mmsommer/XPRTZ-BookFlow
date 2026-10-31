@@ -58,10 +58,7 @@ public static class Endpoints
             TypedResults.Ok(await service.BooksAsync(Hosting.GetActor(user), ct))).WithSummary("List authorized published titles")
             .Describe("ListBooks", "Books", "Lists tenant books visible through authorized manuscripts. Distributors can list tenant titles. Orderable indicates publishing approval, not distributor inventory.", 401, 403, 500);
         group.MapGet("/books/{id:guid}", async (Guid id, ClaimsPrincipal user, IManuscriptService service, CancellationToken ct) =>
-        {
-            var books = await service.BooksAsync(Hosting.GetActor(user), ct);
-            return TypedResults.Ok(books.SingleOrDefault(x => x.Id == id) ?? throw new BookFlow.Core.NotFoundException());
-        }).WithSummary("Read an authorized book")
+            TypedResults.Ok(await service.BookAsync(Hosting.GetActor(user), id, ct))).WithSummary("Read an authorized book")
             .Describe("GetBook", "Books", "Returns a title, ISBN, manuscript ID and orderability for a book visible in ListBooks. Returns 404 when the book is not visible.", 400, 401, 403, 404, 500);
         group.MapGet("/books/{id:guid}/stock", async (Guid id, ClaimsPrincipal user, IManuscriptService service, CancellationToken ct) =>
             TypedResults.Ok(await service.StockAsync(Hosting.GetActor(user), id, ct))).WithSummary("Read stock by title and distributor")

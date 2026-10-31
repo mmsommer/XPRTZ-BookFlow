@@ -230,10 +230,15 @@ public sealed class ManuscriptService(BookFlowDbContext db, IBlobStore blobs) : 
 
     public async Task<IReadOnlyList<BookResponse>> BooksAsync(Actor actor, CancellationToken ct)
     {
-        var books = await db.Books.Where(x => x.TenantId == actor.TenantId).ToListAsync(ct);
-        var manuscripts = await ListAsync(actor, ct);
-        return books.Where(x => actor.Role == "Distributor" || manuscripts.Any(m => m.Id == x.ManuscriptId)).Select(Map).ToArray();
+        return await AuthorizedBooks(actor).OrderBy(x => x.Id)
+            .Select(x => new BookResponse(x.Id, x.ManuscriptId, x.Title, x.Isbn, x.Orderable))
+            .ToListAsync(ct);
     }
+
+    public async Task<BookResponse> BookAsync(Actor actor, Guid id, CancellationToken ct) =>
+        await AuthorizedBooks(actor).Where(x => x.Id == id)
+            .Select(x => new BookResponse(x.Id, x.ManuscriptId, x.Title, x.Isbn, x.Orderable))
+            .SingleOrDefaultAsync(ct) ?? throw new NotFoundException();
 
     public async Task<PrintOrderResponse> GetOrderAsync(Actor actor, Guid id, CancellationToken ct)
     {
@@ -288,6 +293,20 @@ public sealed class ManuscriptService(BookFlowDbContext db, IBlobStore blobs) : 
         else
             await RequireParticipantAsync(actor.TenantId, actor.Id, "Distributor", ct);
         return book;
+    }
+
+    private IQueryable<Book> AuthorizedBooks(Actor actor)
+    {
+        var books = db.Books.AsNoTracking().Where(x => x.TenantId == actor.TenantId);
+        if (actor.Role == "Distributor")
+            return books;
+
+        return books.Where(book => db.Manuscripts.Any(manuscript =>
+            manuscript.Id == book.ManuscriptId && manuscript.TenantId == actor.TenantId &&
+            (actor.Role == "Admin" ||
+             actor.Role == "Author" && manuscript.AuthorId == actor.Id ||
+             actor.Role == "Editor" && manuscript.EditorId == actor.Id ||
+             actor.Role == "Publisher" && manuscript.PublisherId == actor.Id)));
     }
 
     private async Task RequireParticipantAsync(Guid tenant, string id, string role, CancellationToken ct)

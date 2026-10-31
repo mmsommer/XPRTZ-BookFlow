@@ -86,6 +86,7 @@ public interface IManuscriptService
     Task<IReadOnlyList<ManuscriptResponse>> ListAsync(Actor actor, CancellationToken ct);
     Task<IReadOnlyList<VersionResponse>> VersionsAsync(Actor actor, Guid id, CancellationToken ct);
     Task<IReadOnlyList<HistoryResponse>> HistoryAsync(Actor actor, Guid id, CancellationToken ct);
+    Task<BookResponse> BookAsync(Actor actor, Guid id, CancellationToken ct);
     Task<IReadOnlyList<BookResponse>> BooksAsync(Actor actor, CancellationToken ct);
     Task<PrintOrderResponse> GetOrderAsync(Actor actor, Guid id, CancellationToken ct);
     Task<IReadOnlyList<StockResponse>> StockAsync(Actor actor, Guid bookId, CancellationToken ct);

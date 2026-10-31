@@ -70,6 +70,30 @@ public sealed class ManuscriptTests
     }
 
     [Fact]
+    public async Task Book_list_includes_books_beyond_the_manuscript_list_limit()
+    {
+        using var test = new TestDatabase();
+        var manuscripts = Enumerable.Range(0, 105).Select(_ => new Manuscript
+        {
+            Id = Guid.NewGuid(), TenantId = test.TenantId, AuthorId = test.Author.Id,
+            PublisherId = test.Publisher.Id, Title = "Test manuscript",
+            Status = ManuscriptStatus.Approved, SubmittedAt = DateTimeOffset.UtcNow
+        }).ToArray();
+        test.Db.Manuscripts.AddRange(manuscripts);
+        test.Db.Books.AddRange(manuscripts.Select((manuscript, index) => new Book
+        {
+            Id = Guid.NewGuid(), ManuscriptId = manuscript.Id, TenantId = test.TenantId,
+            PublisherId = test.Publisher.Id, Title = $"Book {index}", Isbn = $"isbn-{index}", Orderable = true
+        }));
+        await test.Db.SaveChangesAsync();
+
+        var service = new ManuscriptService(test.Db, new Mock<IBlobStore>().Object);
+
+        (await service.ListAsync(test.Author, CancellationToken.None)).Should().HaveCount(100);
+        (await service.BooksAsync(test.Author, CancellationToken.None)).Should().HaveCount(105);
+    }
+
+    [Fact]
     public async Task Approval_requires_assigned_editor_and_correct_state()
     {
         using var test = new TestDatabase();
