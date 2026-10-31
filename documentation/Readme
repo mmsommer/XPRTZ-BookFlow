@@ -20,6 +20,7 @@ The brief focuses on managing book and manuscript information, coordinating publ
 - [OpenAPI and HTTP endpoints](../src/API-Endpoints.md)
 - [Testing strategy](#testing-strategy)
 - [Private Kubernetes deployment and external ingress](#private-kubernetes-deployment-and-external-ingress)
+- [Azure application and container architecture](#azure-application-and-container-architecture)
 - [Running locally](#running-locally)
 - [Reliability and event delivery](#reliability-and-event-delivery)
 
@@ -464,31 +465,113 @@ Some domain events intentionally have two destinations for different responsibil
 
 To handle peak load, Kubernetes Horizontal Pod Autoscaling (HPA) can increase or decrease service replicas based on CPU, memory, or custom metrics. Event-driven workers can use KEDA with an Azure Service Bus queue or topic subscription to scale based on message backlog. Set replica and resource limits to prevent downstream dependencies from being overwhelmed.
 
+## Azure application and container architecture
+
+The diagram shows the target Azure deployment of the eight production application containers and the resources defined in [`main.bicep`](../infrastructure/main.bicep). Each application is deployed independently inside private AKS. The secured external ingress forwards requests to the `BookFlow.ApiFrontend` container; the ingress and application deployments are configured separately from Bicep.
+
 ```mermaid
-flowchart LR
-	ExternalSystems[External systems and users] -->|HTTPS requests and callbacks| ApiFrontend[Secured API frontend<br/>Validate and throttle requests]
-	ApiFrontend -->|Publishes accepted events| EventGrid{{Event Grid}}
+flowchart TB
+    Users["Authors, editors and publishers"]
+    Distributors["Distributor APIs"]
+    PrintProvider["PrintOnDemand API"]
+    EmailProvider["Email provider"]
+    PublisherApis["Publisher APIs"]
 
-	subgraph Azure[Azure]
-		EventGrid
-		ServiceBus[(Azure Service Bus queues and topics)]
-		EventGrid -->|Durable background work| ServiceBus
-		EventGrid -->|Lightweight notifications over HTTPS| ApiFrontend
+    subgraph Azure["Microsoft Azure - BookFlow resource group"]
+        Entra["Microsoft Entra ID<br/>JWT authentication and SQL administrator group"]
+        ACR["Azure Container Registry<br/>Application images"]
+        EventGrid["Azure Event Grid custom topic<br/>Work and notification allowlists"]
+        WorkloadIdentity["User-assigned workload identity<br/>AKS OIDC federation and Azure RBAC"]
+        GridIdentity["User-assigned Event Grid identity<br/>Service Bus delivery and dead-letter access"]
 
-		subgraph PrivateCluster[Private Kubernetes cluster]
-			WebApp[Web App service]
-			BookFlowServices[BookFlow .NET services]
-			EventConsumerPods[.NET background consumer pods]
-			NotificationPods[Notification service pods]
+        subgraph VNet["Virtual network"]
+            Ingress["Secured HTTPS ingress<br/>Separately configured"]
 
-			ApiFrontend -->|Proxies authorized app requests| WebApp
-			ApiFrontend -->|Forwards notifications privately| NotificationPods
-			EventConsumerPods -->|Dispatches messages to services| BookFlowServices
-		end
-	end
+            subgraph AKS["Private Azure Kubernetes Service - aks subnet"]
+                subgraph Apps["bookflow namespace - independent .NET 10 containers"]
+                    Frontend["BookFlow.ApiFrontend<br/>JWT validation, throttling, callbacks and proxy"]
+                    WebApp["BookFlow.WebApp<br/>Browser client, manuscripts, versions and orders"]
+                    Assignment["BookFlow.EditorAssignment<br/>Editor selection"]
+                    Proofprint["BookFlow.ProofprintGeneration<br/>Version-linked PDF generation"]
+                    Progress["BookFlow.ProgressTracking<br/>Lifecycle history"]
+                    Printing["BookFlow.PrintDemandOrders<br/>Initial printing and reprints"]
+                    Inventory["BookFlow.Inventory<br/>Stock and sales ledger"]
+                    Notifications["BookFlow.Notifications<br/>Durable receipts and notification handlers"]
+                end
+                ServiceAccount["bookflow service account<br/>Workload Identity-enabled pods"]
+            end
 
-	ServiceBus <-->|Consumers receive and acknowledge over private connection| EventConsumerPods
+            PrivateEndpoints["Private endpoints subnet<br/>Blob, SQL, Service Bus and Key Vault"]
+            DNS["Private DNS zones and VNet links<br/>Blob, SQL, Service Bus and Key Vault"]
+        end
+
+        SQL[("Azure SQL Database - BookFlow<br/>Domain data, inbox, outbox and notification receipts")]
+        Blob[("Azure Blob Storage<br/>manuscripts / proofprints / event-grid-dead-letter")]
+        KeyVault["Azure Key Vault<br/>Integration credentials"]
+
+        subgraph Bus["Azure Service Bus - bookflow-events topic"]
+            Topic["Durable event fan-out"]
+            AssignmentSub["editor-assignment"]
+            ProofprintSub["proofprint-generation"]
+            ProgressSub["progress-tracking"]
+            PrintingSub["print-demand-orders"]
+            InventorySub["inventory"]
+            Topic --> AssignmentSub
+            Topic --> ProofprintSub
+            Topic --> ProgressSub
+            Topic --> PrintingSub
+            Topic --> InventorySub
+        end
+    end
+
+    Users -->|"HTTPS"| Ingress
+    Distributors -->|"Authenticated callbacks"| Ingress
+    PrintProvider -->|"Production and delivery callbacks"| Ingress
+    Ingress --> Frontend
+    Frontend -->|"Authorized application requests"| WebApp
+    Frontend -->|"Private notification ingress"| Notifications
+
+    WebApp -->|"Committed domain events via SQL outbox"| EventGrid
+    Frontend -->|"Validated callback events via SQL outbox"| EventGrid
+    Assignment -->|"EditorAssigned via SQL outbox"| EventGrid
+    Proofprint -->|"ProofprintCreated via SQL outbox"| EventGrid
+    EventGrid -->|"Filtered background work"| Topic
+    EventGrid -->|"Optional authenticated HTTPS webhook"| Ingress
+    EventGrid -->|"Undeliverable events"| Blob
+
+    AssignmentSub --> Assignment
+    ProofprintSub --> Proofprint
+    ProgressSub --> Progress
+    PrintingSub --> Printing
+    InventorySub --> Inventory
+
+    Apps -->|"Shared SQL persistence"| PrivateEndpoints
+    WebApp -->|"Immutable manuscript files"| PrivateEndpoints
+    Proofprint -->|"Source files and generated PDFs"| PrivateEndpoints
+    PrivateEndpoints --- SQL
+    PrivateEndpoints --- Blob
+    PrivateEndpoints --- Topic
+    PrivateEndpoints --- KeyVault
+    DNS -.->|"Private endpoint name resolution"| PrivateEndpoints
+
+    Proofprint -->|"Generate PDF"| PrintProvider
+    Printing -->|"Idempotent print requests"| PrintProvider
+    Notifications -->|"Email delivery"| EmailProvider
+    Notifications -->|"Book orderability notification"| PublisherApis
+
+    ACR -.->|"Kubelet image pull using AcrPull"| AKS
+    Entra -.->|"Bearer JWT validation"| Frontend
+    Entra -.->|"Entra-only database authentication"| SQL
+    ServiceAccount -.->|"Federated token exchange"| WorkloadIdentity
+    WorkloadIdentity -.->|"Blob, SQL, Event Grid, Service Bus and secret access"| Apps
+    GridIdentity -.->|"Managed-identity delivery"| EventGrid
 ```
+
+- **Solid arrows** show requests, events and data access; **dotted arrows** show identity, image-pull and DNS dependencies. The shared `Apps` connection represents SQL access used by all application containers; the individual blob connections highlight manuscript/proofprint operations.
+- Bicep provisions AKS, the VNet/subnets, private endpoints/DNS, ACR, SQL, Blob Storage, Key Vault, Event Grid, Service Bus and managed identities. Containers, external ingress/TLS, Entra app registrations/roles, SQL permissions, secret injection and external provider integrations require separate deployment/configuration. Key Vault credentials are supplied to integrations through approved secret injection.
+- Notifications are routed from Event Grid through the frontend to `BookFlow.Notifications`, **not** through a Service Bus subscription. Its SQL receipts provide durable acceptance and retries. Worker subscriptions and Event Grid deliveries have dead-letter handling; the blob container shown is the Event Grid dead-letter destination.
+- `BookFlow.LocalProviders` is a ninth container used only for local development and is deliberately absent from the production Azure diagram. The local setup is described in [the application README](../src/README.md).
+- This is the **target architecture**, not confirmation of a deployed environment. The [Azure prerequisites](../src/README.md#cloud-prerequisites-that-are-not-deployed-by-this-code) still apply: Service Bus private endpoints require a supported tier (Premium rather than the current Standard), and Event Grid delivery identity/webhook authentication must be configured and validated. Event Grid and ACR currently have public endpoints; their placement inside the resource group does not imply private networking.
 
 ### Deploying the Azure resources
 

@@ -2,6 +2,54 @@
 
 Implementation of the [service specifications](../documentation/Service-Specifications.md).
 
+See the [Azure application and container diagram](../documentation/Readme#azure-application-and-container-architecture) for the eight production containers, Azure resources, networking, identities and external integrations.
+
+## Azure overview
+
+Download the [PowerPoint container overview](../documentation/BookFlow-Azure-Overview.pptx) for a single-slide diagram with official Azure product icons and editable container labels.
+
+Target deployment; each box inside AKS is a separate container. Connections summarize Azure dependencies, not individual application flows.
+
+```mermaid
+flowchart TB
+    subgraph Azure["Azure"]
+        ACR["Container Registry"]
+        Entra["Microsoft Entra ID"]
+
+        subgraph VNet["Virtual Network"]
+            subgraph AKS["Azure Kubernetes Service (AKS)"]
+                Frontend["BookFlow.ApiFrontend"]
+                WebApp["BookFlow.WebApp"]
+                Assignment["BookFlow.EditorAssignment"]
+                Proofprint["BookFlow.ProofprintGeneration"]
+                Progress["BookFlow.ProgressTracking"]
+                Printing["BookFlow.PrintDemandOrders"]
+                Inventory["BookFlow.Inventory"]
+                Notifications["BookFlow.Notifications"]
+            end
+            PrivateNetwork["Private Endpoints / Private DNS"]
+        end
+
+        SQL["Azure SQL Database"]
+        Blob["Blob Storage"]
+        Bus["Service Bus"]
+        Events["Event Grid"]
+        Vault["Key Vault"]
+
+        ACR -->|Images| AKS
+        Entra -.->|Identity| AKS
+        AKS --- PrivateNetwork
+        PrivateNetwork --- SQL
+        PrivateNetwork --- Blob
+        PrivateNetwork --- Bus
+        PrivateNetwork --- Vault
+        AKS --- Events
+        Events --> Bus
+    end
+```
+
+`BookFlow.LocalProviders` is development-only and is not deployed to Azure. Deployment prerequisites and detailed routing are covered in the linked architecture diagram above.
+
 ## Projects
 
 | Application | Responsibility | Durable input |
