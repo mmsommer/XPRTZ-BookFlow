@@ -17,6 +17,7 @@ The brief focuses on managing book and manuscript information, coordinating publ
 - [Low-stock and reprint decision workflow](#low-stock-and-reprint-decision-workflow)
 - [Testing strategy](#testing-strategy)
 - [Private Kubernetes deployment and external ingress](#private-kubernetes-deployment-and-external-ingress)
+- [Running locally](#running-locally)
 - [Reliability and event delivery](#reliability-and-event-delivery)
 
 ## Original assignment
@@ -502,6 +503,28 @@ az deployment group create `
 ```
 
 `notificationWebhookUrl` is optional. Set it to the secured API frontend's HTTPS notification endpoint to create the Event Grid notification subscription; the endpoint must handle Event Grid's validation handshake. The template outputs the resource names, Event Grid endpoint, and workload identity client ID and service-account subject. Configure the `bookflow` Kubernetes namespace and `bookflow` service account to use that workload identity. Grant the identity its required SQL database roles separately; SQL access is not enabled by a server-level role assignment.
+
+## Running locally
+
+The architecture can be approximated on a developer machine with Docker Desktop and local service substitutes, but it is not a one-command setup in this repository yet: application projects and a Docker Compose file have not been added. The Bicep template deploys real Azure resources and does not run against emulators.
+
+1. Install Docker Desktop and start the Docker engine.
+2. Run [Azurite](https://learn.microsoft.com/azure/storage/common/storage-use-azurite) for manuscript and proofprint blobs. For example:
+
+   ```powershell
+   docker run --rm --name bookflow-azurite `
+     -p 10000:10000 -p 10001:10001 -p 10002:10002 `
+     mcr.microsoft.com/azure-storage/azurite
+   ```
+
+   This starts a temporary local storage instance; add a mounted data directory if you need its data to survive container removal.
+3. Use the [Azure Service Bus emulator](https://learn.microsoft.com/azure/service-bus-messaging/overview-emulator) for queues, topics, and subscriptions. Follow its setup instructions to provide the required SQL Server dependency and entity configuration, including the BookFlow topic and consumer subscriptions. The emulator is for development and testing only; its entities and messages do not persist across container restarts, and it does not support Entra ID or virtual-network integration.
+4. Run SQL Server in a local container and create the BookFlow database using the application's schema or migrations. Configure local development authentication; the Entra-only SQL authentication used by the Azure template is not available in this setup.
+5. Run the Web App, API frontend, and worker services as local processes or containers once their application projects are available. Configure their connection strings to use the local Azurite, Service Bus emulator, and SQL Server endpoints. When the application runs in Compose, use the Compose service names as hostnames; `localhost` inside a container refers to that container, not the host.
+6. Replace Event Grid with a local event-dispatch adapter that publishes relevant events to Service Bus and forwards notification event types to the API frontend. Event Grid routing, managed identities, private endpoints, AKS scaling, and cloud dead-letter behavior are not emulated by this setup.
+7. Point email, PrintOnDemand, and publisher integrations at test doubles or mock endpoints so local runs do not contact external systems.
+
+Use Docker Compose to manage these local dependencies together when a Compose configuration is added. This setup is useful for developing and exercising workflow logic, but it does not reproduce Azure networking, identity, delivery guarantees, or production scaling; verify those behaviors in an Azure test environment.
 
 ## Reliability and event delivery
 
