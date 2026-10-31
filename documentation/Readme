@@ -32,6 +32,19 @@ classDiagram
 		+ManuscriptStatus Status
 		+DateTime SubmittedAt
 	}
+	class ManuscriptStatus {
+		<<enumeration>>
+		Submitted
+		AssignedForEditing
+		AwaitingAuthorResponse
+		AwaitingEditorReview
+		Approved
+	}
+	class ManuscriptStatusHistory {
+		+string Id
+		+ManuscriptStatus Status
+		+DateTime ChangedAt
+	}
 	class ManuscriptVersion {
 		+string Id
 		+int VersionNumber
@@ -68,6 +81,7 @@ classDiagram
 
 	Author "1" --> "0..*" Manuscript : submits
 	Editor "0..1" --> "0..*" Manuscript : reviews
+	Manuscript "1" *-- "0..*" ManuscriptStatusHistory : status history
 	Manuscript "1" *-- "1" ManuscriptMetadata : metadata
 	Manuscript "1" *-- "1..*" ManuscriptVersion : versions
 	ManuscriptVersion "1" <-- "0..*" ManuscriptVersion : based on original
@@ -160,6 +174,31 @@ flowchart LR
 	EmailService -->|Delivers revision notification| Editor
 	ProofprintService -->|Generates proofprint for edited or revised version| PrintOnDemandAPI
 	PrintOnDemandAPI -->|Publishes ProofprintCreated event| EventGrid
+```
+
+## Manuscript and publication progress tracking
+
+Lifecycle events track a manuscript from submission through editing, author feedback, editor review, and approval. Event Grid routes `ManuscriptUploaded`, `EditorAssigned`, `ManuscriptEdited`, `ManuscriptRevised`, and `ManuscriptApproved` events to the progress-tracking service. The service updates the manuscript's current status and status history in SQL Database, which the Web App displays to publishers and other authorized users.
+
+```mermaid
+flowchart LR
+	Publisher([Publisher]) -->|Views project progress| WebApp
+
+	subgraph Azure[Microsoft Azure]
+		BlobStorage[(Blob Storage)]
+		WebApp[Web App]
+		EditorAssignmentService[Editor assignment service]
+		EventGrid{{Event Grid}}
+		ProgressTrackingService[Publication progress service]
+		SqlDatabase[(SQL Database)]
+
+		BlobStorage -->|ManuscriptUploaded| EventGrid
+		EditorAssignmentService -->|EditorAssigned| EventGrid
+		WebApp -->|ManuscriptEdited, ManuscriptRevised, ManuscriptApproved| EventGrid
+		EventGrid -->|Routes lifecycle events| ProgressTrackingService
+		ProgressTrackingService -->|Updates current status and history| SqlDatabase
+		WebApp <-->|Reads manuscript status and history| SqlDatabase
+	end
 ```
 
 ## Manuscript approval workflow
