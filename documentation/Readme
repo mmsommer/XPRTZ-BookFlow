@@ -106,7 +106,7 @@ classDiagram
 
 ## New manuscript upload workflow
 
-When an author uploads a manuscript, the Web App stores the file in Blob Storage and manages manuscript and user metadata in SQL Database. Blob Storage sends an upload event to Event Grid, which routes it to the editor-assignment and proofprint-generation services. The editor-assignment service assigns an editor, saves the assignment, and publishes an `EditorAssigned` event that Event Grid routes to the email service. The proofprint-generation service submits the manuscript to the PrintOnDemand API; when the proofprint is created, the API publishes a `ProofprintCreated` event to Event Grid.
+When an author uploads a manuscript, the Web App stores the file in Blob Storage and manages manuscript and user metadata in SQL Database. Blob Storage sends an upload event to Event Grid, which routes it to the editor-assignment and proofprint-generation services. The editor-assignment service assigns an editor, saves the assignment, and publishes an `EditorAssigned` event that Event Grid routes to the email service. The proofprint-generation service submits the manuscript to the PrintOnDemand API; when the proofprint is created, the API publishes a `ProofprintCreated` event to Event Grid. Event Grid routes that event to an editor-notification service, which emails the assigned editor a link to the proofprint.
 
 ```mermaid
 flowchart LR
@@ -118,29 +118,34 @@ flowchart LR
 		EventGrid{{Event Grid}}
 		EditorAssignmentService[Editor assignment service<br/>Assigns an editor]
 		ProofprintService[Proofprint generation service]
+		ProofprintNotificationService[Proofprint notification service]
 		SqlDatabase[(SQL Database)]
 
 		WebApp -->|Stores manuscript file| BlobStorage
 		BlobStorage -->|Manuscript uploaded event| EventGrid
 		EventGrid -->|Routes upload event| EditorAssignmentService
 		EventGrid -->|Routes upload event| ProofprintService
+		EventGrid -->|Routes ProofprintCreated event| ProofprintNotificationService
 		EditorAssignmentService -->|Persists editor assignment| SqlDatabase
 		EditorAssignmentService -->|Publishes EditorAssigned event| EventGrid
+		ProofprintNotificationService -->|Looks up assigned editor and proofprint link| SqlDatabase
 		WebApp <-->|Reads and writes manuscript and user metadata| SqlDatabase
 	end
 
 	EmailService[Email service]
 	Editor([Assigned editor])
 	PrintOnDemandAPI[PrintOnDemand API]
+	ProofprintNotificationService -->|Sends email with proofprint link| EmailService
 	EventGrid -->|Routes EditorAssigned event| EmailService
 	EmailService -->|Delivers notification| Editor
+	EmailService -->|Delivers proofprint-ready notification| Editor
 	ProofprintService -->|Submits manuscript for proofprint generation| PrintOnDemandAPI
 	PrintOnDemandAPI -->|Publishes ProofprintCreated event| EventGrid
 ```
 
 ## Manuscript proofreading workflow
 
-The editor opens the manuscript in the Web App, highlights and edits the text, and saves the result as a new Blob Storage version linked to the original. The Web App stores the highlights and version relationship in SQL Database, then publishes a `ManuscriptEdited` event to Event Grid. Event Grid routes it to an independently deployed author-notification service and a proofprint-generation service. The notification service looks up the author and updated-version link, then sends an email; the proofprint service submits the editor's version to the PrintOnDemand API. When each proofprint is created, the API publishes a `ProofprintCreated` event to Event Grid. The author follows the link to read the edited manuscript in the Web App, responds to the changes, and uploads a revised version linked to the editor's version. The Web App stores the author's feedback and new version metadata, then publishes a `ManuscriptRevised` event. Event Grid routes that event to an independent editor-notification service and the proofprint-generation service. The notification service emails the editor a link to the revised manuscript, and the proofprint service submits the author's version to the PrintOnDemand API, which publishes another `ProofprintCreated` event when that proofprint is ready.
+The editor opens the manuscript in the Web App, highlights and edits the text, and saves the result as a new Blob Storage version linked to the original. The Web App stores the highlights and version relationship in SQL Database, then publishes a `ManuscriptEdited` event to Event Grid. Event Grid routes it to an independently deployed author-notification service and a proofprint-generation service. The notification service looks up the author and updated-version link, then sends an email; the proofprint service submits the editor's version to the PrintOnDemand API. When each proofprint is created, the API publishes a `ProofprintCreated` event to Event Grid, which routes it to the editor-notification service so the editor receives an email with the proofprint link. The author follows the link to read the edited manuscript in the Web App, responds to the changes, and uploads a revised version linked to the editor's version. The Web App stores the author's feedback and new version metadata, then publishes a `ManuscriptRevised` event. Event Grid routes that event to an independent editor-notification service and the proofprint-generation service. The notification service emails the editor a link to the revised manuscript, and the proofprint service submits the author's version to the PrintOnDemand API, which publishes another `ProofprintCreated` event when that proofprint is ready; the editor is notified with its link as well.
 
 ```mermaid
 flowchart LR
@@ -166,6 +171,7 @@ flowchart LR
 		WebApp -->|Stores revised version linked to editor's version| BlobStorage
 		WebApp -->|Publishes ManuscriptRevised event| EventGrid
 		EventGrid -->|Routes ManuscriptRevised event| EditorNotificationService
+		EventGrid -->|Routes ProofprintCreated event| EditorNotificationService
 		EventGrid -->|Routes ManuscriptRevised event| ProofprintService
 		EditorNotificationService -->|Looks up editor and revised-version link| SqlDatabase
 	end
@@ -180,6 +186,8 @@ flowchart LR
 	Author -->|Responds to edits and uploads revision| WebApp
 	EditorNotificationService -->|Sends email with revised-manuscript link| EmailService
 	EmailService -->|Delivers revision notification| Editor
+	EditorNotificationService -->|Sends email with proofprint link| EmailService
+	EmailService -->|Delivers proofprint-ready notification| Editor
 	ProofprintService -->|Generates proofprint for edited or revised version| PrintOnDemandAPI
 	PrintOnDemandAPI -->|Publishes ProofprintCreated event| EventGrid
 ```
