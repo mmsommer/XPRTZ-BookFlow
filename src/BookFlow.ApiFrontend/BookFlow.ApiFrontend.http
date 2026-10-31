@@ -1,0 +1,33 @@
+@baseUrl = http://localhost:8080
+@token = REPLACE_WITH_DISTRIBUTOR_TOKEN
+@eventGridToken = REPLACE_WITH_EVENTGRID_TOKEN
+
+### Web client
+GET {{baseUrl}}/
+
+### Proxy authenticated app request
+GET {{baseUrl}}/api/manuscripts
+Authorization: Bearer {{token}}
+
+### Distributor stock callback
+POST {{baseUrl}}/callbacks
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"id":"callback-1","eventType":"StockUpdated","subject":"tenants/11111111-1111-1111-1111-111111111111/books/REPLACE_BOOK_ID","eventTime":"2026-10-31T14:00:00Z","dataVersion":"1","data":{"tenantId":"11111111-1111-1111-1111-111111111111","sequence":1,"bookId":"REPLACE_BOOK_ID","distributorId":"distributor","quantity":100}}
+
+### Event Grid synchronous validation handshake
+POST {{baseUrl}}/events/notifications
+Authorization: Bearer {{eventGridToken}}
+Content-Type: application/json
+
+[{"id":"validation","eventType":"Microsoft.EventGrid.SubscriptionValidationEvent","data":{"validationCode":"sample-code"}}]
+
+### Missing credentials (401)
+GET {{baseUrl}}/api/manuscripts
+
+### Liveness
+GET {{baseUrl}}/health/live
+
+### Readiness
+GET {{baseUrl}}/health/ready

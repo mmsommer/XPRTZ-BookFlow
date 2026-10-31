@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>BookFlow</title>
+  <style>
+    body { font: 16px system-ui; max-width: 1000px; margin: 2rem auto; padding: 0 1rem; color: #182334; }
+    input, select, textarea, button { box-sizing: border-box; padding: .7rem; margin: .4rem 0; font: inherit; }
+    input, select, textarea { width: 100%; }
+    textarea, pre { font: 14px monospace; }
+    pre { white-space: pre-wrap; overflow-wrap: anywhere; padding: 1rem; background: #eef2f6; }
+    button { cursor: pointer; background: #153c70; color: white; border: 0; }
+    label { display: block; font-weight: 600; margin-top: 1rem; }
+  </style>
+</head>
+<body>
+  <h1>BookFlow</h1>
+  <p>Submit, review and publish manuscripts. Operations are authorized by your bearer token's role and publisher tenant.
+     Files and proofprints are private; downloads require the same authorization.</p>
+  <label for="token">Access token (kept only in this page's memory)</label>
+  <input id="token" type="password" autocomplete="off" placeholder="Paste your Entra or local development JWT">
+  <label for="operation">Operation</label>
+  <select id="operation">
+    <option value="GET /api/manuscripts">List my manuscripts</option>
+    <option value="GET /api/manuscripts/{id}">Read manuscript</option>
+    <option value="POST /api/manuscripts">Submit manuscript (author)</option>
+    <option value="GET /api/manuscripts/{id}/versions">Read versions, highlights and feedback</option>
+    <option value="GET /api/manuscripts/{id}/history">Read lifecycle history</option>
+    <option value="POST /api/manuscripts/{id}/edits">Submit edits (editor)</option>
+    <option value="POST /api/manuscripts/{id}/revisions">Respond with revision (author)</option>
+    <option value="POST /api/manuscripts/{id}/approval">Approve and request initial printing (editor)</option>
+    <option value="GET /api/books">List available books</option>
+    <option value="GET /api/books/{id}/stock">Read inventory and sales</option>
+    <option value="POST /api/orders">Request reprint (publisher)</option>
+    <option value="GET /api/orders/{id}">Track print order</option>
+    <option value="GET /api/manuscripts/{id}/versions/{file}/file">Download manuscript version</option>
+    <option value="GET /api/manuscripts/{id}/proofprints/{file}/file">Download proofprint</option>
+    <option value="POST /api/participants">Register participant (administrator)</option>
+  </select>
+  <label for="resource">Manuscript, book or order ID</label>
+  <input id="resource" placeholder="Resource ID">
+  <label for="fileId">Version or proofprint ID (for downloads)</label>
+  <input id="fileId" placeholder="File ID">
+  <label for="file">Manuscript file (submission, edits or revision)</label>
+  <input id="file" type="file">
+  <label for="payload">Request JSON</label>
+  <textarea id="payload" rows="12">{}</textarea>
+  <button id="send" type="button">Run operation</button>
+  <p id="status" role="status"></p>
+  <pre id="result"></pre>
+  <script>
+    const byId = id => document.getElementById(id);
+    const manuscript = new URLSearchParams(location.search).get("manuscript");
+    if (manuscript) byId("resource").value = manuscript;
+    byId("operation").addEventListener("change", () => {
+      const operation = byId("operation").value;
+      const key = crypto.randomUUID();
+      let payload = {};
+      if (operation === "POST /api/manuscripts")
+        payload = { title: "My manuscript", publisherId: "publisher", idempotencyKey: key, fileBase64: "" };
+      if (operation.endsWith("/edits") || operation.endsWith("/revisions"))
+        payload = { parentVersionId: "", idempotencyKey: key, fileBase64: "",
+          feedback: operation.endsWith("/revisions") ? "My response to the editor" : null, highlights: [] };
+      if (operation.endsWith("/approval"))
+        payload = { isbn: "9780306406157", distributorId: "distributor", quantity: 100, idempotencyKey: key };
+      if (operation === "POST /api/orders")
+        payload = { bookId: "", distributorId: "distributor", quantity: 100, idempotencyKey: key };
+      if (operation === "POST /api/participants")
+        payload = { id: "author", name: "Author", email: "author@example.test", role: "Author" };
+      byId("payload").value = JSON.stringify(payload, null, 2);
+    });
+    byId("send").addEventListener("click", async () => {
+      byId("send").disabled = true;
+      try {
+        const [method, template] = byId("operation").value.split(" ");
+        const path = template.replace("{id}", encodeURIComponent(byId("resource").value))
+          .replace("{file}", encodeURIComponent(byId("fileId").value));
+        const headers = { Authorization: "Bearer " + byId("token").value.trim() };
+        const options = { method, headers };
+        if (method === "POST") {
+          const payload = JSON.parse(byId("payload").value);
+          if (Object.hasOwn(payload, "fileBase64") && byId("file").files.length) {
+            const file = byId("file").files[0];
+            if (file.size > 10000000) throw new Error("Files must be no larger than 10 MB.");
+            payload.fileBase64 = await new Promise((resolve, reject) => {
+              const reader = new FileReader();
+              reader.onload = () => resolve(reader.result.split(",")[1]);
+              reader.onerror = () => reject(new Error("Cannot read the selected file."));
+              reader.readAsDataURL(file);
+            });
+          }
+          headers["Content-Type"] = "application/json";
+          options.body = JSON.stringify(payload);
+        }
+        const response = await fetch(path, options);
+        byId("status").textContent = response.status + " " + response.statusText;
+        if (response.ok && template.endsWith("/file")) {
+          const url = URL.createObjectURL(await response.blob());
+          const link = document.createElement("a");
+          link.href = url; link.download = template.includes("proofprints") ? "proofprint.pdf" : "manuscript.bin";
+          link.click(); URL.revokeObjectURL(url);
+          byId("result").textContent = "Downloaded authorized file.";
+        } else {
+          const text = await response.text();
+          byId("result").textContent = text ? JSON.stringify(JSON.parse(text), null, 2) : "";
+        }
+      } catch (error) {
+        byId("status").textContent = error.message;
+      } finally {
+        byId("send").disabled = false;
+      }
+    });
+  </script>
+</body>
+</html>

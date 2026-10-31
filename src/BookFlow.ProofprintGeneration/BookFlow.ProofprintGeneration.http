@@ -1,0 +1,7 @@
+@baseUrl = http://localhost:8080
+
+### Private worker liveness
+GET {{baseUrl}}/health/live
+
+### Database readiness
+GET {{baseUrl}}/health/ready

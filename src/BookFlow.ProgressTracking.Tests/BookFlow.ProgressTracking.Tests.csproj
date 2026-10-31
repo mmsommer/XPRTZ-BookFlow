@@ -1,0 +1,4 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <Import Project="..\TestProjects.props" />
+  <ItemGroup><ProjectReference Include="..\BookFlow.ProgressTracking\BookFlow.ProgressTracking.csproj" /></ItemGroup>
+</Project>

@@ -1,0 +1,103 @@
+@baseUrl = http://localhost:8080
+@token = REPLACE_WITH_AUTHOR_EDITOR_PUBLISHER_OR_ADMIN_TOKEN
+@manuscriptId = 00000000-0000-0000-0000-000000000001
+@versionId = 00000000-0000-0000-0000-000000000002
+@proofprintId = 00000000-0000-0000-0000-000000000003
+@bookId = 00000000-0000-0000-0000-000000000004
+@orderId = 00000000-0000-0000-0000-000000000005
+
+### Register a participant (Admin)
+POST {{baseUrl}}/api/participants
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"id":"author","name":"Author","email":"author@example.test","role":"Author"}
+
+### Read participant (Admin)
+GET {{baseUrl}}/api/participants/author
+Authorization: Bearer {{token}}
+
+### Submit (Author)
+POST {{baseUrl}}/api/manuscripts
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"title":"Example","publisherId":"publisher","idempotencyKey":"upload-1","fileBase64":"aGVsbG8="}
+
+### List manuscripts
+GET {{baseUrl}}/api/manuscripts
+Authorization: Bearer {{token}}
+
+### Read manuscript
+GET {{baseUrl}}/api/manuscripts/{{manuscriptId}}
+Authorization: Bearer {{token}}
+
+### Versions with highlights, feedback and proofprints
+GET {{baseUrl}}/api/manuscripts/{{manuscriptId}}/versions
+Authorization: Bearer {{token}}
+
+### Lifecycle history
+GET {{baseUrl}}/api/manuscripts/{{manuscriptId}}/history
+Authorization: Bearer {{token}}
+
+### Edit (Editor)
+POST {{baseUrl}}/api/manuscripts/{{manuscriptId}}/edits
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"parentVersionId":"{{versionId}}","idempotencyKey":"edit-1","fileBase64":"ZWRpdGVk","highlights":[{"startOffset":0,"endOffset":5,"originalText":"hello","editedText":"edited"}]}
+
+### Revision (Author)
+POST {{baseUrl}}/api/manuscripts/{{manuscriptId}}/revisions
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"parentVersionId":"{{versionId}}","idempotencyKey":"revision-1","fileBase64":"cmV2aXNlZA==","feedback":"Accepted changes","highlights":[]}
+
+### Approve (Editor)
+POST {{baseUrl}}/api/manuscripts/{{manuscriptId}}/approval
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"isbn":"9780306406157","distributorId":"distributor","quantity":100,"idempotencyKey":"approval-1"}
+
+### Books
+GET {{baseUrl}}/api/books
+Authorization: Bearer {{token}}
+
+### Book
+GET {{baseUrl}}/api/books/{{bookId}}
+Authorization: Bearer {{token}}
+
+### Stock
+GET {{baseUrl}}/api/books/{{bookId}}/stock
+Authorization: Bearer {{token}}
+
+### Order (Publisher)
+POST {{baseUrl}}/api/orders
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{"bookId":"{{bookId}}","distributorId":"distributor","quantity":50,"idempotencyKey":"order-1"}
+
+### Order status
+GET {{baseUrl}}/api/orders/{{orderId}}
+Authorization: Bearer {{token}}
+
+### Download version
+GET {{baseUrl}}/api/manuscripts/{{manuscriptId}}/versions/{{versionId}}/file
+Authorization: Bearer {{token}}
+
+### Download proofprint
+GET {{baseUrl}}/api/manuscripts/{{manuscriptId}}/proofprints/{{proofprintId}}/file
+Authorization: Bearer {{token}}
+
+### Missing resource (404)
+GET {{baseUrl}}/api/manuscripts/00000000-0000-0000-0000-000000000000
+Authorization: Bearer {{token}}
+
+### Liveness
+GET {{baseUrl}}/health/live
+
+### Readiness
+GET {{baseUrl}}/health/ready

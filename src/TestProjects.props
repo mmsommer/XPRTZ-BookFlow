@@ -1,0 +1,15 @@
+<Project>
+  <PropertyGroup>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit" />
+    <PackageReference Include="xunit.runner.visualstudio"><PrivateAssets>all</PrivateAssets></PackageReference>
+    <PackageReference Include="Moq" />
+    <PackageReference Include="FluentAssertions" />
+    <Using Include="Xunit" />
+    <ProjectReference Include="..\BookFlow.Testing\BookFlow.Testing.csproj" />
+  </ItemGroup>
+</Project>

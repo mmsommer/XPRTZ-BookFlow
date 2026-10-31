@@ -1,0 +1,9 @@
+<Project>
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <RuntimeIdentifiers>win-x64;linux-x64</RuntimeIdentifiers>
+  </PropertyGroup>
+</Project>

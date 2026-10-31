@@ -1,0 +1,41 @@
+@baseUrl = http://localhost:8081
+@providerToken = REPLACE_WITH_BOOKFLOW_PROVIDER_TOKEN_FROM_IGNORED_ENV
+
+### Demo author token; use other known roles for their tokens
+GET {{baseUrl}}/tokens/Author
+Authorization: Bearer {{providerToken}}
+
+### Synthetic proofprint
+POST {{baseUrl}}/proofprints
+Authorization: Bearer {{providerToken}}
+Idempotency-Key: proofprint-demo
+Content-Type: application/octet-stream
+
+Example manuscript
+
+### Synthetic print order
+POST {{baseUrl}}/orders
+Authorization: Bearer {{providerToken}}
+Idempotency-Key: order-demo
+Content-Type: application/json
+
+{"bookId":"00000000-0000-0000-0000-000000000001","title":"Example","isbn":"9780306406157","distributorId":"distributor","quantity":100}
+
+### Synthetic email
+POST {{baseUrl}}/emails
+Authorization: Bearer {{providerToken}}
+Idempotency-Key: email-demo
+Content-Type: application/json
+
+{"destination":"author@example.test","template":"manuscript-approved","link":"http://localhost:8080/","publisherApi":false}
+
+### Synthetic publisher availability
+POST {{baseUrl}}/publisher-notifications
+Authorization: Bearer {{providerToken}}
+Idempotency-Key: publisher-demo
+Content-Type: application/json
+
+{"destination":"publisher","template":"book-orderable","link":"http://localhost:8080/","publisherApi":true}
+
+### Liveness
+GET {{baseUrl}}/health/live

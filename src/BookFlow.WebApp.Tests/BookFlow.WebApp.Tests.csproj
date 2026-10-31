@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <Import Project="..\TestProjects.props" />
+  <ItemGroup>
+    <ProjectReference Include="..\BookFlow.WebApp\BookFlow.WebApp.csproj" />
+    <ProjectReference Include="..\BookFlow.EditorAssignment\BookFlow.EditorAssignment.csproj" />
+    <ProjectReference Include="..\BookFlow.ProofprintGeneration\BookFlow.ProofprintGeneration.csproj" />
+    <ProjectReference Include="..\BookFlow.ProgressTracking\BookFlow.ProgressTracking.csproj" />
+    <ProjectReference Include="..\BookFlow.PrintDemandOrders\BookFlow.PrintDemandOrders.csproj" />
+    <ProjectReference Include="..\BookFlow.Inventory\BookFlow.Inventory.csproj" />
+    <ProjectReference Include="..\BookFlow.Notifications\BookFlow.Notifications.csproj" />
+  </ItemGroup>
+</Project>

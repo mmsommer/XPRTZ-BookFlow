@@ -1,0 +1,4 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <Import Project="..\TestProjects.props" />
+  <ItemGroup><ProjectReference Include="..\BookFlow.Infrastructure\BookFlow.Infrastructure.csproj" /></ItemGroup>
+</Project>

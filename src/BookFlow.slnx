@@ -1,0 +1,24 @@
+<Solution>
+  <Project Path="BookFlow.ApiFrontend.Tests/BookFlow.ApiFrontend.Tests.csproj" />
+  <Project Path="BookFlow.ApiFrontend/BookFlow.ApiFrontend.csproj" />
+  <Project Path="BookFlow.Core/BookFlow.Core.csproj" />
+  <Project Path="BookFlow.EditorAssignment.Tests/BookFlow.EditorAssignment.Tests.csproj" />
+  <Project Path="BookFlow.EditorAssignment/BookFlow.EditorAssignment.csproj" />
+  <Project Path="BookFlow.Infrastructure.Tests/BookFlow.Infrastructure.Tests.csproj" />
+  <Project Path="BookFlow.Infrastructure/BookFlow.Infrastructure.csproj" />
+  <Project Path="BookFlow.Inventory.Tests/BookFlow.Inventory.Tests.csproj" />
+  <Project Path="BookFlow.Inventory/BookFlow.Inventory.csproj" />
+  <Project Path="BookFlow.LocalProviders.Tests/BookFlow.LocalProviders.Tests.csproj" />
+  <Project Path="BookFlow.LocalProviders/BookFlow.LocalProviders.csproj" />
+  <Project Path="BookFlow.Notifications.Tests/BookFlow.Notifications.Tests.csproj" />
+  <Project Path="BookFlow.Notifications/BookFlow.Notifications.csproj" />
+  <Project Path="BookFlow.PrintDemandOrders.Tests/BookFlow.PrintDemandOrders.Tests.csproj" />
+  <Project Path="BookFlow.PrintDemandOrders/BookFlow.PrintDemandOrders.csproj" />
+  <Project Path="BookFlow.ProgressTracking.Tests/BookFlow.ProgressTracking.Tests.csproj" />
+  <Project Path="BookFlow.ProgressTracking/BookFlow.ProgressTracking.csproj" />
+  <Project Path="BookFlow.ProofprintGeneration.Tests/BookFlow.ProofprintGeneration.Tests.csproj" />
+  <Project Path="BookFlow.ProofprintGeneration/BookFlow.ProofprintGeneration.csproj" />
+  <Project Path="BookFlow.Testing/BookFlow.Testing.csproj" />
+  <Project Path="BookFlow.WebApp.Tests/BookFlow.WebApp.Tests.csproj" />
+  <Project Path="BookFlow.WebApp/BookFlow.WebApp.csproj" />
+</Solution>

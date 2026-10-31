@@ -2,6 +2,8 @@
 
 These specifications translate the workflows in [Readme](./Readme) and the resources in [main.bicep](../infrastructure/main.bicep) into implementation requirements. They describe application services; they do not imply that application projects, API contracts, database migrations, or external integrations already exist.
 
+The .NET 10 implementation and its Docker/test instructions are now available in [src/README.md](../src/README.md). Confirmed implementation decisions: one Notifications application with isolated handlers, least-loaded active editor within a publisher tenant, initial quantity/distributor supplied during approval, and provider-neutral HTTP contracts with development test doubles. Local mode uses persistent SQLite/file storage and an event adapter; cloud networking and real provider deployment remain environment-specific acceptance steps.
+
 ## 1. Runtime and deployment boundary
 
 - Implement the application as containerized .NET services deployed to the private AKS cluster in the `bookflow` namespace. The Bicep template creates infrastructure only; it does not build or deploy these services.

@@ -1,0 +1,15 @@
+@baseUrl = http://localhost:8080
+@eventGridToken = REPLACE_WITH_EVENTGRID_TOKEN
+
+### Private notification endpoint; only reachable internally in Compose
+POST {{baseUrl}}/notifications
+Authorization: Bearer {{eventGridToken}}
+Content-Type: application/json
+
+[{"id":"assignment-notification-1","eventType":"EditorAssigned","subject":"manuscripts/REPLACE_MANUSCRIPT_ID","eventTime":"2026-10-31T14:00:00Z","dataVersion":"1","data":{"tenantId":"11111111-1111-1111-1111-111111111111","sequence":2,"manuscriptId":"REPLACE_MANUSCRIPT_ID"}}]
+
+### Liveness
+GET {{baseUrl}}/health/live
+
+### Readiness
+GET {{baseUrl}}/health/ready

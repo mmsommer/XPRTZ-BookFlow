@@ -1,0 +1,93 @@
+name: bookflow
+
+x-environment: &environment
+  ASPNETCORE_ENVIRONMENT: Development
+  ASPNETCORE_HTTP_PORTS: "8080"
+  BookFlow__Mode: Local
+  ConnectionStrings__BookFlow: "Data Source=/data/bookflow.db;Default Timeout=30"
+  BookFlow__BlobRoot: /data/blobs
+  BookFlow__FrontendUrl: http://frontend:8080/
+  BookFlow__WebAppUrl: http://webapp:8080/
+  BookFlow__NotificationsUrl: http://notifications:8080/
+  BookFlow__PublicUrl: http://localhost:8080
+  BookFlow__ListingHosts__0: shop.example.test
+  BookFlow__DemoTenant: 11111111-1111-1111-1111-111111111111
+  Authentication__SigningKey: ${BOOKFLOW_SIGNING_KEY:?Run Initialize-Local.ps1 first}
+  Providers__BaseUrl: http://providers:8080/
+  Providers__Token: ${BOOKFLOW_PROVIDER_TOKEN:?Run Initialize-Local.ps1 first}
+  Providers__StoreRoot: /data/providers
+
+x-application: &application
+  environment: *environment
+  volumes: [bookflow-data:/data]
+  networks: [bookflow]
+  restart: unless-stopped
+  depends_on:
+    database-init:
+      condition: service_completed_successfully
+
+services:
+  database-init:
+    build:
+      context: .
+      dockerfile: BookFlow.WebApp/Dockerfile
+    environment:
+      <<: *environment
+      BookFlow__InitializeDatabase: "true"
+      BookFlow__InitializeOnly: "true"
+    volumes: [bookflow-data:/data]
+    networks: [bookflow]
+    restart: "no"
+  frontend:
+    <<: *application
+    build:
+      context: .
+      dockerfile: BookFlow.ApiFrontend/Dockerfile
+    ports: ["127.0.0.1:8080:8080"]
+  webapp:
+    <<: *application
+    build:
+      context: .
+      dockerfile: BookFlow.WebApp/Dockerfile
+  editor-assignment:
+    <<: *application
+    build:
+      context: .
+      dockerfile: BookFlow.EditorAssignment/Dockerfile
+  proofprint-generation:
+    <<: *application
+    build:
+      context: .
+      dockerfile: BookFlow.ProofprintGeneration/Dockerfile
+  progress-tracking:
+    <<: *application
+    build:
+      context: .
+      dockerfile: BookFlow.ProgressTracking/Dockerfile
+  print-demand-orders:
+    <<: *application
+    build:
+      context: .
+      dockerfile: BookFlow.PrintDemandOrders/Dockerfile
+  inventory:
+    <<: *application
+    build:
+      context: .
+      dockerfile: BookFlow.Inventory/Dockerfile
+  notifications:
+    <<: *application
+    build:
+      context: .
+      dockerfile: BookFlow.Notifications/Dockerfile
+  providers:
+    <<: *application
+    build:
+      context: .
+      dockerfile: BookFlow.LocalProviders/Dockerfile
+    ports: ["127.0.0.1:8081:8080"]
+
+networks:
+  bookflow:
+
+volumes:
+  bookflow-data:
