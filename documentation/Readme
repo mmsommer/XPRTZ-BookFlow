@@ -15,6 +15,7 @@ The brief focuses on managing book and manuscript information, coordinating publ
 - [Publisher print order workflow](#publisher-print-order-workflow)
 - [Book production and inventory tracking workflow](#book-production-and-inventory-tracking-workflow)
 - [Low-stock and reprint decision workflow](#low-stock-and-reprint-decision-workflow)
+- [Service implementation specifications](Service-Specifications.md)
 - [Testing strategy](#testing-strategy)
 - [Private Kubernetes deployment and external ingress](#private-kubernetes-deployment-and-external-ingress)
 - [Running locally](#running-locally)
