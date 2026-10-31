@@ -78,6 +78,13 @@ classDiagram
 		+int AvailableQuantity
 		+DateTime UpdatedAt
 	}
+	class InventoryLedgerEntry {
+		+string Id
+		+string SourceEventId
+		+string EventType
+		+int Quantity
+		+DateTime RecordedAt
+	}
 
 	Author "1" --> "0..*" Manuscript : submits
 	Editor "0..1" --> "0..*" Manuscript : reviews
@@ -94,6 +101,7 @@ classDiagram
 	Publisher "1" --> "0..*" Book : publishes
 	Book "1" --> "0..*" StockRecord : availability
 	Distributor "1" --> "0..*" StockRecord : reports
+	StockRecord "1" *-- "0..*" InventoryLedgerEntry : ledger entries
 ```
 
 ## New manuscript upload workflow
@@ -203,7 +211,7 @@ flowchart LR
 
 ## Manuscript approval workflow
 
-When the editor approves a manuscript in the Web App, the approval status is saved in SQL Database and a `ManuscriptApproved` event is published to Event Grid. Event Grid routes the event to independently deployed services: one submits a print demand to the PrintOnDemand API, one emails the author that the manuscript is approved, and one notifies publisher APIs that the new book is available.
+When the editor approves a manuscript in the Web App, the approval status is saved in SQL Database and a `ManuscriptApproved` event is published to Event Grid. Event Grid routes the event to independently deployed services: one submits a print demand to the PrintOnDemand API, one emails the author that the manuscript is approved, and one notifies publisher APIs that the book is available for ordering. This indicates catalog/order availability, not physical distributor stock; delivery and stock updates are tracked separately.
 
 ```mermaid
 flowchart LR
@@ -231,7 +239,7 @@ flowchart LR
 	PrintDemandService -->|Requests manuscript printing| PrintOnDemandAPI
 	AuthorApprovalNotificationService -->|Sends approval email| EmailService
 	EmailService -->|Delivers approval notification| Author
-	PublisherAvailabilityService -->|Notifies new book is available| PublisherAPIs
+	PublisherAvailabilityService -->|Notifies book is available for ordering| PublisherAPIs
 ```
 
 ## Publisher print order workflow
@@ -267,7 +275,7 @@ flowchart LR
 
 ## Book production and inventory tracking workflow
 
-The PrintOnDemand API publishes a `BooksPrinted` event with the printed quantity. Distributors publish `BooksDistributed`, `BooksSold`, and `StockUpdated` events as books move through their inventory. Event Grid routes these events to the inventory service, which maintains per-title and per-distributor totals for printed, distributed, and sold books, along with current stock, in SQL Database. The Web App reads these figures for availability and reporting.
+The PrintOnDemand API publishes a `BooksPrinted` event with the printed quantity. Distributors publish `BooksDistributed`, `BooksSold`, and `StockUpdated` events as books move through their inventory. Event Grid routes these events to the inventory service, which maintains per-title and per-distributor totals for printed, distributed, and sold books, along with current stock, in SQL Database. When a distributor confirms that a title has copies in stock and its listing is open for sale, it publishes a `BookAvailableForSale` event. Event Grid routes that event to an author-notification service, which emails the author a link to the distributor's listing. The Web App reads the inventory figures for availability and reporting.
 
 ```mermaid
 flowchart LR
@@ -279,13 +287,22 @@ flowchart LR
 	subgraph Azure[Microsoft Azure]
 		EventGrid{{Event Grid}}
 		InventoryService[Inventory service]
+		AuthorAvailabilityService[Author availability notification service]
 		SqlDatabase[(SQL Database)]
 		WebApp[Web App]
 
 		EventGrid -->|Routes production, distribution, sales, and stock events| InventoryService
+		EventGrid -->|Routes BookAvailableForSale| AuthorAvailabilityService
+		AuthorAvailabilityService -->|Looks up author and sale link| SqlDatabase
 		InventoryService -->|Updates book totals and current stock| SqlDatabase
 		WebApp <-->|Reads inventory and sales data| SqlDatabase
 	end
+
+	EmailService[Email service]
+	Author([Author])
+	AuthorAvailabilityService -->|Emails distributor listing link| EmailService
+	EmailService -->|Notifies author book is open for sale| Author
+	Distributor -->|Publishes BookAvailableForSale when stocked and open for sale| EventGrid
 ```
 
 ## Low-stock and reprint decision workflow
@@ -326,4 +343,14 @@ flowchart LR
 	PrintOrderService -->|Submits title and quantity| PrintOnDemandAPI
 	PrintOnDemandAPI -->|Delivers extra copies| Distributor
 ```
+
+## Testing strategy
+
+All application code will be covered by unit tests. Each end-to-end workflow will also have integration tests that verify event publication and handling, service interactions, and the resulting persisted state.
+
+## Reliability and event delivery
+
+Calls to external systems such as the PrintOnDemand API, email service, and publisher APIs use timeouts and bounded retries with exponential backoff and jitter for transient network errors and timeouts. Do not retry permanent client errors. Use idempotency keys for operations that may have succeeded before a timeout, so retries do not create duplicate print orders or other side effects. Event consumers also deduplicate by event ID and tolerate events arriving out of order.
+
+Azure Event Grid provides at-least-once delivery, not an exactly-once guarantee: failed deliveries are retried according to the subscription policy, and consumers may receive duplicate or out-of-order events. Configure maximum delivery attempts and event time-to-live, and enable a dead-letter destination so events that cannot be delivered can be investigated or replayed. See [Azure Event Grid delivery and retry](https://learn.microsoft.com/en-us/azure/event-grid/delivery-and-retry).
 
