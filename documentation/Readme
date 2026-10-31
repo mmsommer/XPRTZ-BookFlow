@@ -510,9 +510,9 @@ az deployment group create `
 
 The .NET 10 applications, separate unit-test projects, Dockerfiles, and self-contained Compose environment are available in [`src`](../src/README.md). Start with the build/test and Docker instructions there. The Compose environment uses persistent SQLite/file storage, a durable local event adapter, and authenticated provider test doubles; it does not require Azure credentials. The same applications provide Azure SQL, Blob Storage, Event Grid, and Service Bus adapters for deployment.
 
-To use the Azure emulators instead of the self-contained local adapters, the architecture can also be approximated with Docker Desktop and the following substitutes. This alternate emulator configuration is not included in Compose. The Bicep template deploys real Azure resources and does not run against emulators.
+To use the Azure emulators instead of the self-contained local adapters, the architecture can also be approximated with Rancher Desktop and the following substitutes. This alternate emulator configuration is not included in Compose. The Bicep template deploys real Azure resources and does not run against emulators.
 
-1. Install Docker Desktop and start the Docker engine.
+1. Install Rancher Desktop, select the dockerd (moby) container engine, and wait for it to be ready. Use the Rancher Docker CLI and the `default` context as described in [the application setup](../src/README.md#local-docker-with-rancher-desktop).
 2. Run [Azurite](https://learn.microsoft.com/azure/storage/common/storage-use-azurite) for manuscript and proofprint blobs. For example:
 
    ```powershell

@@ -17,4 +17,4 @@ finally { $random.Dispose() }
 BOOKFLOW_SIGNING_KEY=$signingKey
 BOOKFLOW_PROVIDER_TOKEN=$providerToken
 "@ | Set-Content $envPath -Encoding ascii
-Write-Output 'Created ignored local credentials in src\.env. Run docker compose up --build from src.'
+Write-Output 'Created ignored local credentials in src\.env. Run Rancher-Docker.ps1 compose up --build -d from src.'

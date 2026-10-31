@@ -31,9 +31,16 @@ dotnet test .\BookFlow.slnx
 
 The test runner is VSTest with xUnit v2. Tests cover domain rules, mocked integrations, SQLite constraints/transactions, duplicate handling, ordering, failure persistence and the complete upload/edit/revise/approve/print/inventory workflow. They do not claim to reproduce Azure networking or identity.
 
-## Local Docker
+## Local Docker with Rancher Desktop
 
-1. Start Docker Desktop using Linux containers.
+1. Start Rancher Desktop and select **dockerd (moby)** under **Preferences > Container Engine**. Wait for the engine to become ready. The `containerd` engine uses nerdctl and cannot run these Docker Compose commands.
+
+   The [Rancher-Docker.ps1](Rancher-Docker.ps1) helper locates Rancher's Windows Docker CLI even when it is not on `PATH` and explicitly uses the `default` Docker context (`docker_engine` named pipe). It does not change the global context or target the stale Docker Desktop `desktop-linux` context. Remove `DOCKER_HOST`/`DOCKER_CONTEXT` overrides if the helper reports them.
+
+   ```powershell
+   powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\Rancher-Docker.ps1 info
+   powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\Rancher-Docker.ps1 compose version
+   ```
 2. Generate local credentials once. The generated `.env` is ignored by Git and excluded from Docker build contexts:
 
    ```powershell
@@ -45,7 +52,7 @@ The test runner is VSTest with xUnit v2. Tests cover domain rules, mocked integr
 3. Build and start:
 
    ```powershell
-   docker compose up --build -d
+   powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\Rancher-Docker.ps1 compose up --build -d
    ```
 
 4. Exercise the full workflow and register the four demo participants:
@@ -67,10 +74,12 @@ The test runner is VSTest with xUnit v2. Tests cover domain rules, mocked integr
 6. Stop containers without removing persisted workflow data:
 
    ```powershell
-   docker compose down
+   powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\Rancher-Docker.ps1 compose down
    ```
 
 Only the API frontend and development provider expose host ports, both bound to loopback. Other services communicate on the Compose network. Images use .NET 10 multi-stage builds and run as the non-root `app` user. The `bookflow-data` named volume stores SQLite, immutable blobs and provider idempotency records. A one-shot initializer creates the schema before the applications start.
+
+The stack has been verified on Rancher Desktop's Linux dockerd engine: all images build, all nine applications run as non-root, the smoke workflow and Event Grid validation succeed, OpenAPI loads, and approved manuscript state plus proofprint PDFs survive a WebApp container restart. The verification stack uses a separate Compose project and does not modify Rancher's Kubernetes containers.
 
 The development provider returns a synthetic PDF, **not a real rendering of manuscript content**; it does not print books, send email or notify actual publishers. Provider responses are idempotent across restarts. Production provider contracts must be implemented or mapped by the real providers.
 
@@ -95,7 +104,7 @@ This builds the solution, creates an isolated temporary database and credentials
 Build each image using this directory as the context, for example:
 
 ```powershell
-docker build -f .\BookFlow.WebApp\Dockerfile -t bookflow-webapp:latest .
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\Rancher-Docker.ps1 build -f .\BookFlow.WebApp\Dockerfile -t bookflow-webapp:latest .
 ```
 
 For each deployed application configure:
