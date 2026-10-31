@@ -486,9 +486,25 @@ flowchart LR
 	ServiceBus <-->|Consumers receive and acknowledge over private connection| EventConsumerPods
 ```
 
+### Deploying the Azure resources
+
+The resource-group Bicep template in [`infrastructure/main.bicep`](../infrastructure/main.bicep) creates the private AKS cluster, container registry, private Blob Storage, Entra-only SQL Database, Key Vault, Event Grid topic, and Service Bus topic with filtered subscriptions for each worker. Private endpoints and private DNS zones connect the data services to the cluster. The application containers, API frontend, external email service, and PrintOnDemand integration are deployed or configured separately.
+
+Event Grid sends only background-work event types to the Service Bus topic; each topic subscription applies its own event-type filter. Notification-only events go to the optional HTTPS webhook instead of being enqueued.
+
+Deploy it with Azure CLI after creating a resource group. The SQL administrator must be a Microsoft Entra security group:
+
+```powershell
+az deployment group create `
+  --resource-group "RESOURCE_GROUP_NAME" `
+  --template-file infrastructure/main.bicep `
+  --parameters sqlAdministratorObjectId="GROUP_OBJECT_ID" sqlAdministratorName="GROUP_DISPLAY_NAME"
+```
+
+`notificationWebhookUrl` is optional. Set it to the secured API frontend's HTTPS notification endpoint to create the Event Grid notification subscription; the endpoint must handle Event Grid's validation handshake. The template outputs the resource names, Event Grid endpoint, and workload identity client ID and service-account subject. Configure the `bookflow` Kubernetes namespace and `bookflow` service account to use that workload identity. Grant the identity its required SQL database roles separately; SQL access is not enabled by a server-level role assignment.
+
 ## Reliability and event delivery
 
 Calls to external systems such as the PrintOnDemand API, email service, and publisher APIs use timeouts and bounded retries with exponential backoff and jitter for transient network errors and timeouts. Do not retry permanent client errors. Use idempotency keys when a request may have succeeded before timing out, preventing duplicate print orders or other side effects. Event consumers deduplicate by event ID and tolerate out-of-order delivery.
 
 Azure Event Grid provides at-least-once delivery, not exactly-once delivery. Failed deliveries are retried according to the subscription policy, so consumers may receive duplicate or out-of-order events. Configure maximum delivery attempts and event time-to-live, and enable a dead-letter destination so undelivered events can be investigated or replayed. See [Azure Event Grid delivery and retry](https://learn.microsoft.com/en-us/azure/event-grid/delivery-and-retry).
-
