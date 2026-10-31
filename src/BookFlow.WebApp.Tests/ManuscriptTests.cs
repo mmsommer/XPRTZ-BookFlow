@@ -1,3 +1,5 @@
+using System.Security.Cryptography;
+using System.Text;
 using BookFlow.Core;
 using BookFlow.Infrastructure;
 using BookFlow.Testing;
@@ -52,6 +54,35 @@ public sealed class ManuscriptTests
         test.Db.Manuscripts.Should().BeEmpty();
         test.Db.Outbox.Should().BeEmpty();
         test.Db.Uploads.Should().ContainSingle().Which.State.Should().Be("Pending");
+    }
+
+    [Fact]
+    public async Task Pending_upload_reservation_rejects_different_content()
+    {
+        using var test = new TestDatabase();
+        const string idempotencyKey = "upload-1";
+        const string originalFile = "aGVsbG8=";
+        var idempotencyHash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(
+            $"{test.TenantId}:{test.Author.Id}:upload:{idempotencyKey}")));
+        var reservationIdBytes = SHA256.HashData(Encoding.UTF8.GetBytes(idempotencyHash));
+        var reservationId = new Guid(reservationIdBytes.AsSpan(0, 16));
+        var originalBytes = Convert.FromBase64String(originalFile);
+        test.Db.Uploads.Add(new UploadReservation
+        {
+            Id = reservationId,
+            BlobName = $"{reservationId}/{Convert.ToHexString(SHA256.HashData(originalBytes))}.bin"
+        });
+        await test.Db.SaveChangesAsync();
+
+        var blobs = new Mock<IBlobStore>(MockBehavior.Strict);
+        var service = new ManuscriptService(test.Db, blobs.Object);
+
+        await FluentActions.Awaiting(() => service.CreateAsync(test.Author,
+            new CreateManuscriptRequest("My book", "publisher", idempotencyKey, "d29ybGQ="),
+            CancellationToken.None)).Should().ThrowAsync<ConflictException>();
+
+        test.Db.Manuscripts.Should().BeEmpty();
+        blobs.VerifyNoOtherCalls();
     }
 
     [Fact]

@@ -4,6 +4,8 @@ using System.Text;
 using System.Text.Json;
 using BookFlow.Core;
 using BookFlow.Infrastructure;
+using Microsoft.Data.SqlClient;
+using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 
 namespace BookFlow.WebApp;
@@ -30,7 +32,16 @@ public sealed class ManuscriptService(BookFlowDbContext db, IBlobStore blobs) : 
         {
             TenantId = actor.TenantId, Id = request.Id, Name = request.Name, Email = request.Email, Role = request.Role
         });
-        await db.SaveChangesAsync(ct);
+        try
+        {
+            await db.SaveChangesAsync(ct);
+        }
+        catch (DbUpdateException ex) when (IsUniqueConstraintViolation(ex))
+        {
+            throw new ConflictException(request.Role == "Publisher"
+                ? "Participant already exists or the tenant already has a publisher."
+                : "Participant already exists.");
+        }
     }
 
     public async Task<ManuscriptResponse> CreateAsync(Actor actor, CreateManuscriptRequest request, CancellationToken ct)
@@ -334,17 +345,45 @@ public sealed class ManuscriptService(BookFlowDbContext db, IBlobStore blobs) : 
     private async Task<UploadReservation> ReserveAsync(string key, byte[] bytes, CancellationToken ct)
     {
         var id = new Guid(SHA256.HashData(Encoding.UTF8.GetBytes(key)).AsSpan(0, 16));
+        var blobName = $"{id}/{Convert.ToHexString(SHA256.HashData(bytes))}.bin";
         var existing = await db.Uploads.FindAsync([id], ct);
         if (existing is not null)
-            return existing;
+            return ValidateReservation(existing, blobName);
         var reservation = new UploadReservation
         {
-            Id = id, BlobName = $"{id}/{Convert.ToHexString(SHA256.HashData(bytes))}.bin",
+            Id = id, BlobName = blobName,
             CreatedAt = DateTimeOffset.UtcNow
         };
         db.Uploads.Add(reservation);
-        await db.SaveChangesAsync(ct);
-        return reservation;
+        try
+        {
+            await db.SaveChangesAsync(ct);
+            return reservation;
+        }
+        catch (DbUpdateException ex) when (IsUniqueConstraintViolation(ex))
+        {
+            db.Entry(reservation).State = EntityState.Detached;
+            var concurrentReservation = await db.Uploads.SingleOrDefaultAsync(x => x.Id == id, ct);
+            if (concurrentReservation is null)
+                throw;
+            return ValidateReservation(concurrentReservation, blobName);
+        }
+    }
+
+    private static UploadReservation ValidateReservation(UploadReservation reservation, string blobName) =>
+        reservation.BlobName == blobName
+            ? reservation
+            : throw new ConflictException("The idempotency key was used for a different upload.");
+
+    private static bool IsUniqueConstraintViolation(DbUpdateException exception)
+    {
+        for (var cause = exception.InnerException; cause is not null; cause = cause.InnerException)
+        {
+            if (cause is SqlException { Number: 2601 or 2627 } ||
+                cause is SqliteException { SqliteExtendedErrorCode: 1555 or 2067 })
+                return true;
+        }
+        return false;
     }
 
     private static string Key(Actor actor, string operation, string key)
