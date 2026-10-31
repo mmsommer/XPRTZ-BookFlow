@@ -177,16 +177,42 @@ public static class Hosting
                     await command.ExecuteNonQueryAsync();
                 }
             }
+            var hasNotificationLeaseId = false;
+            var hasNotificationLeaseUntil = false;
+            await using (var command = connection.CreateCommand())
+            {
+                command.CommandText = "PRAGMA table_info(\"NotificationDeliveries\")";
+                await using var reader = await command.ExecuteReaderAsync();
+                while (await reader.ReadAsync())
+                {
+                    hasNotificationLeaseId |= reader.GetString(1) == "LeaseId";
+                    hasNotificationLeaseUntil |= reader.GetString(1) == "LeaseUntilUtcTicks";
+                }
+            }
+            if (!hasNotificationLeaseId)
+            {
+                await using var command = connection.CreateCommand();
+                command.CommandText = "ALTER TABLE \"NotificationDeliveries\" ADD COLUMN \"LeaseId\" TEXT NULL";
+                await command.ExecuteNonQueryAsync();
+            }
+            if (!hasNotificationLeaseUntil)
+            {
+                await using var command = connection.CreateCommand();
+                command.CommandText = "ALTER TABLE \"NotificationDeliveries\" ADD COLUMN \"LeaseUntilUtcTicks\" INTEGER NOT NULL DEFAULT 0";
+                await command.ExecuteNonQueryAsync();
+            }
 
             await db.Database.ExecuteSqlRawAsync(
                 """
                 DROP INDEX IF EXISTS "IX_Outbox_Published_DeadLettered_LeaseUntilUtcTicks";
+                DROP INDEX IF EXISTS "IX_NotificationDeliveries_Sent_DeadLettered_NextAttemptAtUtcTicks_Key";
+                DROP INDEX IF EXISTS "IX_NotificationDeliveries_Sent_DeadLettered_LeaseUntilUtcTicks_NextAttemptAtUtcTicks_Key";
                 CREATE INDEX IF NOT EXISTS "IX_Outbox_Published_DeadLettered_LeaseUntilUtcTicks_NextAttemptAtUtcTicks_Id"
                     ON "Outbox" ("Published", "DeadLettered", "LeaseUntilUtcTicks", "NextAttemptAtUtcTicks", "Id");
                 CREATE INDEX IF NOT EXISTS "IX_LocalDeliveries_Consumer_Completed_DeadLettered_NextAttemptAtUtcTicks_EventId"
                     ON "LocalDeliveries" ("Consumer", "Completed", "DeadLettered", "NextAttemptAtUtcTicks", "EventId");
-                CREATE INDEX IF NOT EXISTS "IX_NotificationDeliveries_Sent_DeadLettered_NextAttemptAtUtcTicks_Key"
-                    ON "NotificationDeliveries" ("Sent", "DeadLettered", "NextAttemptAtUtcTicks", "Key");
+                CREATE INDEX IF NOT EXISTS "IX_NotificationDeliveries_Sent_DeadLettered_LeaseUntilUtcTicks_NextAttemptAtUtcTicks_Key"
+                    ON "NotificationDeliveries" ("Sent", "DeadLettered", "LeaseUntilUtcTicks", "NextAttemptAtUtcTicks", "Key");
                 """);
         }
         finally

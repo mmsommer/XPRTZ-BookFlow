@@ -18,10 +18,16 @@ public sealed class ProofprintTests
         var provider = new Mock<IPrintProvider>(MockBehavior.Strict);
         byte[] source = [1, 2, 3];
         var pdf = "%PDF-1.4\nsynthetic"u8.ToArray();
-        blobs.Setup(x => x.GetAsync("manuscripts", version.BlobName, It.IsAny<CancellationToken>())).ReturnsAsync(source);
-        provider.Setup(x => x.GenerateProofprintAsync(source, $"proofprint:{version.Id}", It.IsAny<CancellationToken>())).ReturnsAsync(pdf);
+        blobs.Setup(x => x.GetAsync("manuscripts", version.BlobName, It.IsAny<CancellationToken>()))
+            .Callback(() => test.Db.Database.CurrentTransaction.Should().BeNull()).ReturnsAsync(source);
+        provider.Setup(x => x.GenerateProofprintAsync(source, $"proofprint:{version.Id}", It.IsAny<CancellationToken>()))
+            .Callback(() => test.Db.Database.CurrentTransaction.Should().BeNull()).ReturnsAsync(pdf);
         blobs.Setup(x => x.PutAsync("proofprints", It.IsAny<string>(), It.IsAny<ReadOnlyMemory<byte>>(), It.IsAny<CancellationToken>()))
-            .Callback(() => test.Db.Outbox.Should().BeEmpty()).Returns(Task.CompletedTask);
+            .Callback(() =>
+            {
+                test.Db.Database.CurrentTransaction.Should().BeNull();
+                test.Db.Outbox.Should().BeEmpty();
+            }).Returns(Task.CompletedTask);
         var handler = new ProofprintHandler(test.Db, new EventTransaction(test.Db), blobs.Object, provider.Object);
         var message = test.Event(EventTypes.Uploaded, manuscript);
 

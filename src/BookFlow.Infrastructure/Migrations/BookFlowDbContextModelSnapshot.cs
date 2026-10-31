@@ -336,6 +336,14 @@ namespace BookFlow.Infrastructure.Migrations
                     b.Property<string>("FailureCode")
                         .HasColumnType("nvarchar(max)");
 
+                    b.Property<string>("LeaseId")
+                        .IsConcurrencyToken()
+                        .HasMaxLength(36)
+                        .HasColumnType("nvarchar(36)");
+
+                    b.Property<long>("LeaseUntilUtcTicks")
+                        .HasColumnType("bigint");
+
                     b.Property<DateTimeOffset?>("NextAttemptAt")
                         .HasColumnType("datetimeoffset");
 
@@ -351,7 +359,7 @@ namespace BookFlow.Infrastructure.Migrations
 
                     b.HasKey("Key");
 
-                    b.HasIndex("Sent", "DeadLettered", "NextAttemptAtUtcTicks", "Key");
+                    b.HasIndex("Sent", "DeadLettered", "LeaseUntilUtcTicks", "NextAttemptAtUtcTicks", "Key");
 
                     b.ToTable("NotificationDeliveries");
                 });

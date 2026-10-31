@@ -595,3 +595,48 @@ END;
 COMMIT;
 GO
 
+BEGIN TRANSACTION;
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261031164405_LeaseNotificationDelivery'
+)
+BEGIN
+    DROP INDEX [IX_NotificationDeliveries_Sent_DeadLettered_NextAttemptAtUtcTicks_Key] ON [NotificationDeliveries];
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261031164405_LeaseNotificationDelivery'
+)
+BEGIN
+    ALTER TABLE [NotificationDeliveries] ADD [LeaseId] nvarchar(36) NULL;
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261031164405_LeaseNotificationDelivery'
+)
+BEGIN
+    ALTER TABLE [NotificationDeliveries] ADD [LeaseUntilUtcTicks] bigint NOT NULL DEFAULT CAST(0 AS bigint);
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261031164405_LeaseNotificationDelivery'
+)
+BEGIN
+    CREATE INDEX [IX_NotificationDeliveries_Sent_DeadLettered_LeaseUntilUtcTicks_NextAttemptAtUtcTicks_Key] ON [NotificationDeliveries] ([Sent], [DeadLettered], [LeaseUntilUtcTicks], [NextAttemptAtUtcTicks], [Key]);
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261031164405_LeaseNotificationDelivery'
+)
+BEGIN
+    INSERT INTO [__EFMigrationsHistory] ([MigrationId], [ProductVersion])
+    VALUES (N'20261031164405_LeaseNotificationDelivery', N'10.0.14');
+END;
+
+COMMIT;
+GO
+

@@ -20,7 +20,9 @@ public sealed class PrintOrderTests
         await test.Db.SaveChangesAsync();
         var provider = new Mock<IPrintProvider>(MockBehavior.Strict);
         provider.Setup(x => x.OrderAsync(It.Is<PrintSubmission>(s => s.BookId == book.Id && s.Quantity == 100),
-            $"print-order:{order.Id}", It.IsAny<CancellationToken>())).ReturnsAsync("external-123");
+            $"print-order:{order.Id}", It.IsAny<CancellationToken>()))
+            .Callback(() => test.Db.Database.CurrentTransaction.Should().BeNull())
+            .ReturnsAsync("external-123");
         var handler = new PrintOrderHandler(test.Db, new EventTransaction(test.Db), provider.Object);
         var message = DomainEvent.Create(type, new EventData(test.TenantId, 1, BookId: book.Id, PrintOrderId: order.Id));
 

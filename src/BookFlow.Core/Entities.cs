@@ -199,4 +199,6 @@ public sealed class NotificationDelivery
     public string? FailureCode { get; set; }
     public DateTimeOffset? NextAttemptAt { get; set; }
     public long? NextAttemptAtUtcTicks { get; set; }
+    public string? LeaseId { get; set; }
+    public long LeaseUntilUtcTicks { get; set; }
 }

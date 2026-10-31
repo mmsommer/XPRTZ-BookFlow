@@ -96,8 +96,9 @@ public sealed class BookFlowDbContext(DbContextOptions<BookFlowDbContext> option
         model.Entity<IdempotencyRecord>().Property(x => x.Key).HasMaxLength(300);
         model.Entity<NotificationDelivery>().HasKey(x => x.Key);
         model.Entity<NotificationDelivery>().Property(x => x.Key).HasMaxLength(300);
+        model.Entity<NotificationDelivery>().Property(x => x.LeaseId).HasMaxLength(36).IsConcurrencyToken();
         model.Entity<NotificationDelivery>().HasIndex(x => new
-            { x.Sent, x.DeadLettered, x.NextAttemptAtUtcTicks, x.Key });
+            { x.Sent, x.DeadLettered, x.LeaseUntilUtcTicks, x.NextAttemptAtUtcTicks, x.Key });
     }
 }
 

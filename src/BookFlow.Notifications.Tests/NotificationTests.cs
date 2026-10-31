@@ -63,6 +63,7 @@ public sealed class NotificationTests
         await test.Db.SaveChangesAsync();
         var provider = new Mock<INotificationProvider>();
         provider.Setup(x => x.SendAsync(message, "notification-key", It.IsAny<CancellationToken>()))
+            .Callback(() => test.Db.Database.CurrentTransaction.Should().BeNull())
             .ThrowsAsync(new HttpRequestException("Unavailable"));
         var service = new NotificationDeliveryService(test.Db, provider.Object, NullLogger<NotificationDeliveryService>.Instance);
         await service.SendNextAsync(CancellationToken.None);
@@ -72,6 +73,8 @@ public sealed class NotificationTests
         delivery.FailureCode.Should().Be(nameof(HttpRequestException));
         delivery.NextAttemptAt.Should().NotBeNull();
         delivery.NextAttemptAtUtcTicks.Should().Be(delivery.NextAttemptAt?.UtcTicks);
+        delivery.LeaseId.Should().BeNull();
+        delivery.LeaseUntilUtcTicks.Should().Be(0);
         provider.Verify(x => x.SendAsync(message, "notification-key", It.IsAny<CancellationToken>()), Times.Once);
     }
 
@@ -99,12 +102,17 @@ public sealed class NotificationTests
         await test.Db.SaveChangesAsync();
 
         var provider = new Mock<INotificationProvider>();
+        provider.Setup(x => x.SendAsync(dueMessage, "zz-due", It.IsAny<CancellationToken>()))
+            .Callback(() => test.Db.Database.CurrentTransaction.Should().BeNull())
+            .Returns(Task.CompletedTask);
         var service = new NotificationDeliveryService(test.Db, provider.Object,
             NullLogger<NotificationDeliveryService>.Instance);
         await service.SendNextAsync(CancellationToken.None);
 
         provider.Verify(x => x.SendAsync(dueMessage, "zz-due", It.IsAny<CancellationToken>()), Times.Once);
-        test.Db.NotificationDeliveries.Single(x => x.Key == "zz-due").Sent.Should().BeTrue();
+        var delivery = test.Db.NotificationDeliveries.Single(x => x.Key == "zz-due");
+        delivery.Sent.Should().BeTrue();
+        delivery.LeaseId.Should().BeNull();
     }
 
     [Fact]

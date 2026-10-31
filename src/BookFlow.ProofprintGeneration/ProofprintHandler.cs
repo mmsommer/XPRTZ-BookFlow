@@ -9,23 +9,33 @@ public sealed class ProofprintHandler(BookFlowDbContext db, IEventTransaction tr
 {
     public string Consumer => "proofprint-generation";
 
-    public Task HandleAsync(DomainEvent message, CancellationToken ct)
+    public async Task HandleAsync(DomainEvent message, CancellationToken ct)
     {
         EventLookup.RequireType(message, EventTypes.Uploaded, EventTypes.Edited, EventTypes.Revised);
-        return transaction.ExecuteAsync(Consumer, message, async token =>
+        if (await db.Inbox.AnyAsync(x => x.Consumer == Consumer && x.EventId == message.Id, ct))
+            return;
+
+        var manuscript = await EventLookup.ManuscriptAsync(db, message, ct);
+        var version = await db.Versions.SingleOrDefaultAsync(
+            x => x.Id == message.Data.VersionId && x.ManuscriptId == manuscript.Id, ct)
+            ?? throw new PermanentFailureException("Source version does not exist.");
+        if (await db.Proofprints.AnyAsync(x => x.VersionId == version.Id, ct))
         {
-            var manuscript = await EventLookup.ManuscriptAsync(db, message, token);
-            var version = await db.Versions.SingleOrDefaultAsync(
-                x => x.Id == message.Data.VersionId && x.ManuscriptId == manuscript.Id, token)
-                ?? throw new PermanentFailureException("Source version does not exist.");
+            await transaction.ExecuteAsync(Consumer, message, _ => Task.CompletedTask, ct);
+            return;
+        }
+
+        var source = await blobs.GetAsync("manuscripts", version.BlobName, ct);
+        var pdf = await provider.GenerateProofprintAsync(source, $"proofprint:{version.Id}", ct);
+        if (pdf.Length < 5 || !pdf.AsSpan(0, 5).SequenceEqual("%PDF-"u8))
+            throw new PermanentFailureException("The proofprint is not a PDF.");
+        var name = $"{manuscript.TenantId}/{manuscript.Id}/{version.Id}.pdf";
+        await blobs.PutAsync("proofprints", name, pdf, ct);
+
+        await transaction.ExecuteAsync(Consumer, message, async token =>
+        {
             if (await db.Proofprints.AnyAsync(x => x.VersionId == version.Id, token))
                 return;
-            var source = await blobs.GetAsync("manuscripts", version.BlobName, token);
-            var pdf = await provider.GenerateProofprintAsync(source, $"proofprint:{version.Id}", token);
-            if (pdf.Length < 5 || !pdf.AsSpan(0, 5).SequenceEqual("%PDF-"u8))
-                throw new PermanentFailureException("The proofprint is not a PDF.");
-            var name = $"{manuscript.TenantId}/{manuscript.Id}/{version.Id}.pdf";
-            await blobs.PutAsync("proofprints", name, pdf, token);
             var proofprint = new Proofprint
             {
                 Id = Guid.NewGuid(), VersionId = version.Id, BlobName = name, CreatedAt = DateTimeOffset.UtcNow
