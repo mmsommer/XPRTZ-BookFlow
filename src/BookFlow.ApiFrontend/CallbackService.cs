@@ -51,10 +51,15 @@ public sealed class CallbackService(BookFlowDbContext db, IConfiguration config)
         if (message.EventType == EventTypes.LowStock && message.Data.Quantity != config.GetValue<int>("Inventory:LowStockThreshold", 10) ||
             message.EventType == EventTypes.Depleted && message.Data.Quantity != 0)
             throw new PermanentFailureException("Callback alert does not match its stock threshold.");
-        if (message.EventType is EventTypes.Printed or EventTypes.Delivered &&
-            !await db.PrintOrders.AnyAsync(x => x.Id == message.Data.PrintOrderId &&
-                x.BookId == book.Id && x.DistributorId == distributor, ct))
-            throw new PermanentFailureException("Production callback must reference an order for this distributor.");
+        PrintOrder? printOrder = null;
+        if (message.EventType is EventTypes.Printed or EventTypes.Delivered)
+        {
+            printOrder = await db.PrintOrders.SingleOrDefaultAsync(x => x.Id == message.Data.PrintOrderId &&
+                x.BookId == book.Id && x.DistributorId == distributor, ct)
+                ?? throw new PermanentFailureException("Production callback must reference an order for this distributor.");
+            if (message.Data.Quantity != printOrder.Quantity)
+                throw new PermanentFailureException("Production callback quantity must match the print order.");
+        }
         if (message.EventType == EventTypes.Available)
         {
             if (!Uri.TryCreate(message.Data.ListingUrl, UriKind.Absolute, out var listing) ||
@@ -73,6 +78,17 @@ public sealed class CallbackService(BookFlowDbContext db, IConfiguration config)
         }
         if (await db.Outbox.AnyAsync(x => x.Id == message.Id, ct))
             throw new ConflictException("Event ID already belongs to another producer.");
+        if (printOrder is not null)
+        {
+            var statusAllowsCallback = message.EventType == EventTypes.Printed
+                ? printOrder.Status is PrintOrderStatus.Requested or PrintOrderStatus.Submitted
+                : printOrder.Status == PrintOrderStatus.Printed;
+            if (!statusAllowsCallback)
+                throw new PermanentFailureException("Production callback does not match the print order's fulfillment state.");
+            printOrder.Status = message.EventType == EventTypes.Printed
+                ? PrintOrderStatus.Printed
+                : PrintOrderStatus.Delivered;
+        }
         db.Idempotency.Add(new IdempotencyRecord { Key = key, RequestHash = hash, ResourceId = book.Id });
         db.Enqueue(message);
         await db.SaveChangesAsync(ct);

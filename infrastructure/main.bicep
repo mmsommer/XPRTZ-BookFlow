@@ -255,6 +255,65 @@ eventType IN ('BooksPrinted', 'BooksDelivered', 'BooksDistributed', 'BooksSold',
   }
 ]
 
+var workloadDefinitions = [
+  {
+    name: 'api-frontend'
+    serviceAccount: 'api-frontend'
+  }
+  {
+    name: 'webapp'
+    serviceAccount: 'webapp'
+  }
+  {
+    name: 'editor-assignment'
+    serviceAccount: 'editor-assignment'
+  }
+  {
+    name: 'proofprint-generation'
+    serviceAccount: 'proofprint-generation'
+  }
+  {
+    name: 'inventory'
+    serviceAccount: 'inventory'
+  }
+  {
+    name: 'print-demand-orders'
+    serviceAccount: 'print-demand-orders'
+  }
+  {
+    name: 'progress-tracking'
+    serviceAccount: 'progress-tracking'
+  }
+  {
+    name: 'notifications'
+    serviceAccount: 'notifications'
+  }
+]
+
+var eventPublisherWorkloadIndexes = [0, 1, 2, 3]
+var serviceBusReceiverBindings = [
+  {
+    workloadIndex: 2
+    subscriptionIndex: 0
+  }
+  {
+    workloadIndex: 3
+    subscriptionIndex: 1
+  }
+  {
+    workloadIndex: 5
+    subscriptionIndex: 2
+  }
+  {
+    workloadIndex: 6
+    subscriptionIndex: 3
+  }
+  {
+    workloadIndex: 4
+    subscriptionIndex: 4
+  }
+]
+
 resource serviceBusSubscriptions 'Microsoft.ServiceBus/namespaces/topics/subscriptions@2024-01-01' = [for subscription in serviceSubscriptions: {
   parent: serviceBusTopic
   name: subscription.name
@@ -285,10 +344,10 @@ resource eventGridTopic 'Microsoft.EventGrid/topics@2022-06-15' = {
   }
 }
 
-resource appIdentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31' = {
-  name: '${namePrefix}-workload'
+resource workloadIdentities 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31' = [for workload in workloadDefinitions: {
+  name: '${namePrefix}-${workload.name}'
   location: location
-}
+}]
 
 resource eventGridIdentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31' = {
   name: '${namePrefix}-eventgrid'
@@ -382,17 +441,17 @@ resource aksCluster 'Microsoft.ContainerService/managedClusters@2024-05-01' = {
   }
 }
 
-resource appFederatedCredential 'Microsoft.ManagedIdentity/userAssignedIdentities/federatedIdentityCredentials@2023-01-31' = {
-  parent: appIdentity
-  name: 'bookflow-workloads'
+resource workloadFederatedCredentials 'Microsoft.ManagedIdentity/userAssignedIdentities/federatedIdentityCredentials@2023-01-31' = [for (workload, index) in workloadDefinitions: {
+  parent: workloadIdentities[index]
+  name: '${workload.name}-federated'
   properties: {
     audiences: [
       'api://AzureADTokenExchange'
     ]
     issuer: aksCluster.properties.oidcIssuerProfile.issuerURL
-    subject: 'system:serviceaccount:bookflow:bookflow'
+    subject: 'system:serviceaccount:bookflow:${workload.serviceAccount}'
   }
-}
+}]
 
 var privateEndpointDefinitions = [
   {
@@ -457,55 +516,66 @@ resource privateEndpointDnsZoneGroups 'Microsoft.Network/privateEndpoints/privat
   }
 }]
 
-resource storageBlobRoleAssignment 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
-  name: guid(storageAccount.id, appIdentity.id, 'ba92f5b4-2d11-453d-a403-e96b0029c9fe')
-  scope: storageAccount
+resource webappManuscriptBlobRoleAssignment 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  name: guid(manuscriptContainer.id, workloadIdentities[1].id, 'ba92f5b4-2d11-453d-a403-e96b0029c9fe')
+  scope: manuscriptContainer
   properties: {
-    principalId: appIdentity.properties.principalId
+    principalId: workloadIdentities[1].properties.principalId
     principalType: 'ServicePrincipal'
     roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', 'ba92f5b4-2d11-453d-a403-e96b0029c9fe')
   }
 }
 
-resource eventGridSenderRoleAssignment 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
-  name: guid(eventGridTopic.id, appIdentity.id, 'd5a91429-5739-47e2-a06b-3470a27159e7')
+resource webappProofprintBlobRoleAssignment 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  name: guid(proofprintsContainer.id, workloadIdentities[1].id, '2a2b9908-6ea1-4ae2-8e65-a410df84e7d1')
+  scope: proofprintsContainer
+  properties: {
+    principalId: workloadIdentities[1].properties.principalId
+    principalType: 'ServicePrincipal'
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '2a2b9908-6ea1-4ae2-8e65-a410df84e7d1')
+  }
+}
+
+resource proofprintManuscriptBlobRoleAssignment 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  name: guid(manuscriptContainer.id, workloadIdentities[3].id, '2a2b9908-6ea1-4ae2-8e65-a410df84e7d1')
+  scope: manuscriptContainer
+  properties: {
+    principalId: workloadIdentities[3].properties.principalId
+    principalType: 'ServicePrincipal'
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '2a2b9908-6ea1-4ae2-8e65-a410df84e7d1')
+  }
+}
+
+resource proofprintProofprintBlobRoleAssignment 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  name: guid(proofprintsContainer.id, workloadIdentities[3].id, 'ba92f5b4-2d11-453d-a403-e96b0029c9fe')
+  scope: proofprintsContainer
+  properties: {
+    principalId: workloadIdentities[3].properties.principalId
+    principalType: 'ServicePrincipal'
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', 'ba92f5b4-2d11-453d-a403-e96b0029c9fe')
+  }
+}
+
+resource eventGridSenderRoleAssignments 'Microsoft.Authorization/roleAssignments@2022-04-01' = [for workloadIndex in eventPublisherWorkloadIndexes: {
+  name: guid(eventGridTopic.id, workloadIdentities[workloadIndex].id, 'd5a91429-5739-47e2-a06b-3470a27159e7')
   scope: eventGridTopic
   properties: {
-    principalId: appIdentity.properties.principalId
+    principalId: workloadIdentities[workloadIndex].properties.principalId
     principalType: 'ServicePrincipal'
     roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', 'd5a91429-5739-47e2-a06b-3470a27159e7')
   }
-}
+}]
 
-resource serviceBusSenderRoleAssignment 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
-  name: guid(serviceBusNamespace.id, appIdentity.id, '69a216fc-b8fb-44d8-bc22-1f3c2cd27a39')
-  scope: serviceBusNamespace
+resource serviceBusReceiverRoleAssignments 'Microsoft.Authorization/roleAssignments@2022-04-01' = [for binding in serviceBusReceiverBindings: {
+  name: guid(serviceBusSubscriptions[binding.subscriptionIndex].id,
+    workloadIdentities[binding.workloadIndex].id, '4f6b6d84-a4a0-4b3b-8f1b-efcbeab7e2c6')
+  scope: serviceBusSubscriptions[binding.subscriptionIndex]
   properties: {
-    principalId: appIdentity.properties.principalId
-    principalType: 'ServicePrincipal'
-    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '69a216fc-b8fb-44d8-bc22-1f3c2cd27a39')
-  }
-}
-
-resource serviceBusReceiverRoleAssignment 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
-  name: guid(serviceBusNamespace.id, appIdentity.id, '4f6b6d84-a4a0-4b3b-8f1b-efcbeab7e2c6')
-  scope: serviceBusNamespace
-  properties: {
-    principalId: appIdentity.properties.principalId
+    principalId: workloadIdentities[binding.workloadIndex].properties.principalId
     principalType: 'ServicePrincipal'
     roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '4f6b6d84-a4a0-4b3b-8f1b-efcbeab7e2c6')
   }
-}
-
-resource keyVaultSecretsRoleAssignment 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
-  name: guid(keyVault.id, appIdentity.id, '4633458b-17de-408a-b874-0445c86b69e6')
-  scope: keyVault
-  properties: {
-    principalId: appIdentity.properties.principalId
-    principalType: 'ServicePrincipal'
-    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '4633458b-17de-408a-b874-0445c86b69e6')
-  }
-}
+}]
 
 resource eventGridServiceBusRoleAssignment 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
   name: guid(serviceBusTopic.id, eventGridIdentity.id, '69a216fc-b8fb-44d8-bc22-1f3c2cd27a39')
@@ -638,8 +708,11 @@ resource notificationEventSubscription 'Microsoft.EventGrid/topics/eventSubscrip
 
 output aksClusterName string = aksCluster.name
 output aksOidcIssuerUrl string = aksCluster.properties.oidcIssuerProfile.issuerURL
-output appWorkloadClientId string = appIdentity.properties.clientId
-output appWorkloadServiceAccount string = 'system:serviceaccount:bookflow:bookflow'
+output workloadIdentityBindings array = [for (workload, index) in workloadDefinitions: {
+  workload: workload.name
+  clientId: workloadIdentities[index].properties.clientId
+  serviceAccount: 'system:serviceaccount:bookflow:${workload.serviceAccount}'
+}]
 output containerRegistryName string = registry.name
 output eventGridTopicEndpoint string = eventGridTopic.properties.endpoint
 output eventGridTopicName string = eventGridTopic.name

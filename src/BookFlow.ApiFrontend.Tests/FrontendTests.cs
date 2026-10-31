@@ -54,6 +54,68 @@ public sealed class FrontendTests
             .Should().ThrowAsync<ConflictException>();
     }
 
+    /// <summary>Verifies print provider callbacks cannot report more copies than were ordered.</summary>
+    [Fact]
+    public async Task Print_provider_cannot_overreport_order_quantity()
+    {
+        using var test = new TestDatabase();
+        var book = test.SeedBook();
+        var order = new PrintOrder
+        {
+            Id = Guid.NewGuid(), BookId = book.Id, DistributorId = test.Distributor.Id,
+            Quantity = 10, Status = PrintOrderStatus.Requested
+        };
+        test.Db.PrintOrders.Add(order);
+        await test.Db.SaveChangesAsync();
+        var provider = new Actor("print-provider", test.TenantId, "PrintProvider");
+        var service = new CallbackService(test.Db, new ConfigurationBuilder().Build());
+        var message = DomainEvent.Create(EventTypes.Delivered,
+            new EventData(test.TenantId, 4, BookId: book.Id, DistributorId: test.Distributor.Id,
+                PrintOrderId: order.Id, Quantity: 11));
+
+        await FluentActions.Awaiting(() => service.AcceptAsync(provider, message, CancellationToken.None))
+            .Should().ThrowAsync<PermanentFailureException>();
+
+        order.Quantity.Should().Be(10);
+        order.Status.Should().Be(PrintOrderStatus.Requested);
+        test.Db.Outbox.Should().BeEmpty();
+    }
+
+    /// <summary>Verifies print order callbacks follow fulfillment state and accept matching retries.</summary>
+    [Fact]
+    public async Task Print_order_callbacks_follow_fulfillment_state()
+    {
+        using var test = new TestDatabase();
+        var book = test.SeedBook();
+        var order = new PrintOrder
+        {
+            Id = Guid.NewGuid(), BookId = book.Id, DistributorId = test.Distributor.Id,
+            Quantity = 10, Status = PrintOrderStatus.Requested
+        };
+        test.Db.PrintOrders.Add(order);
+        await test.Db.SaveChangesAsync();
+        var provider = new Actor("print-provider", test.TenantId, "PrintProvider");
+        var service = new CallbackService(test.Db, new ConfigurationBuilder().Build());
+        var printed = DomainEvent.Create(EventTypes.Printed,
+            new EventData(test.TenantId, 4, BookId: book.Id, DistributorId: test.Distributor.Id,
+                PrintOrderId: order.Id, Quantity: 10));
+
+        await service.AcceptAsync(provider, printed, CancellationToken.None);
+        order.Status.Should().Be(PrintOrderStatus.Printed);
+        await service.AcceptAsync(provider, printed, CancellationToken.None);
+        var repeatedPrint = printed with { Id = Guid.NewGuid().ToString() };
+        await FluentActions.Awaiting(() => service.AcceptAsync(provider, repeatedPrint, CancellationToken.None))
+            .Should().ThrowAsync<PermanentFailureException>();
+
+        var delivered = DomainEvent.Create(EventTypes.Delivered,
+            new EventData(test.TenantId, 5, BookId: book.Id, DistributorId: test.Distributor.Id,
+                PrintOrderId: order.Id, Quantity: 10));
+        await service.AcceptAsync(provider, delivered, CancellationToken.None);
+
+        order.Status.Should().Be(PrintOrderStatus.Delivered);
+        test.Db.Outbox.Should().HaveCount(2);
+    }
+
     /// <summary>Verifies forwarding reports dependency failure instead of success.</summary>
     [Fact]
     public async Task Forwarding_reports_dependency_failure_instead_of_success()
