@@ -8,7 +8,9 @@ The brief focuses on managing book and manuscript information, coordinating publ
 
 The original assignment PDF is available at [XPRTZ Code Opdracht 2025.pdf](../XPRTZ%20Code%20Opdracht%202025.pdf).
 
-## Conceptual class diagram
+## Class diagram
+
+The class diagram outlines BookFlow's core domain model. Authors submit manuscripts for editors to review; each manuscript has metadata, version history, highlighted edits, and author feedback. An approved manuscript can become a book published by a publisher, while distributors report book availability through stock records.
 
 ```mermaid
 classDiagram
