@@ -1,0 +1,173 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "BookFlow API Frontend",
+      "type": "coreclr",
+      "request": "launch",
+      "program": "${workspaceFolder}/src/BookFlow.ApiFrontend/bin/Debug/net10.0/BookFlow.ApiFrontend.dll",
+      "cwd": "${workspaceFolder}/src/BookFlow.ApiFrontend",
+      "console": "integratedTerminal",
+      "stopAtEntry": false,
+      "env": {
+        "ASPNETCORE_ENVIRONMENT": "Development",
+        "ASPNETCORE_URLS": "http://127.0.0.1:5100",
+        "Authentication__SigningKey": "bookflow-vscode-local-only-signing-key-2026",
+        "BookFlow__Mode": "Local",
+        "BookFlow__BlobRoot": "${workspaceFolder}/src/.local/blobs",
+        "BookFlow__FrontendUrl": "http://127.0.0.1:5100/",
+        "BookFlow__WebAppUrl": "http://127.0.0.1:5102/",
+        "BookFlow__NotificationsUrl": "http://127.0.0.1:5103/",
+        "BookFlow__ListingHosts__0": "shop.example.test",
+        "ConnectionStrings__BookFlow": "Data Source=${workspaceFolder}/src/BookFlow.WebApp/.bookflow-local.db;Default Timeout=30"
+      }
+    },
+    {
+      "name": "BookFlow Local Providers",
+      "type": "coreclr",
+      "request": "launch",
+      "program": "${workspaceFolder}/src/BookFlow.LocalProviders/bin/Debug/net10.0/BookFlow.LocalProviders.dll",
+      "cwd": "${workspaceFolder}/src/BookFlow.LocalProviders",
+      "console": "integratedTerminal",
+      "stopAtEntry": false,
+      "env": {
+        "ASPNETCORE_ENVIRONMENT": "Development",
+        "ASPNETCORE_URLS": "http://127.0.0.1:5101",
+        "Providers__Token": "bookflow-vscode-local-provider-token",
+        "Providers__StoreRoot": "${workspaceFolder}/src/.local/providers"
+      }
+    },
+    {
+      "name": "BookFlow WebApp",
+      "type": "coreclr",
+      "request": "launch",
+      "program": "${workspaceFolder}/src/BookFlow.WebApp/bin/Debug/net10.0/BookFlow.WebApp.dll",
+      "cwd": "${workspaceFolder}/src/BookFlow.WebApp",
+      "console": "integratedTerminal",
+      "stopAtEntry": false,
+      "env": {
+        "ASPNETCORE_ENVIRONMENT": "Development",
+        "ASPNETCORE_URLS": "http://127.0.0.1:5102",
+        "Authentication__SigningKey": "bookflow-vscode-local-only-signing-key-2026",
+        "BookFlow__Mode": "Local",
+        "BookFlow__InitializeDatabase": "true",
+        "BookFlow__BlobRoot": "${workspaceFolder}/src/.local/blobs",
+        "BookFlow__FrontendUrl": "http://127.0.0.1:5100/",
+        "ConnectionStrings__BookFlow": "Data Source=${workspaceFolder}/src/BookFlow.WebApp/.bookflow-local.db;Default Timeout=30"
+      }
+    },
+    {
+      "name": "BookFlow Notifications",
+      "type": "coreclr",
+      "request": "launch",
+      "program": "${workspaceFolder}/src/BookFlow.Notifications/bin/Debug/net10.0/BookFlow.Notifications.dll",
+      "cwd": "${workspaceFolder}/src/BookFlow.Notifications",
+      "console": "integratedTerminal",
+      "stopAtEntry": false,
+      "env": {
+        "ASPNETCORE_ENVIRONMENT": "Development",
+        "ASPNETCORE_URLS": "http://127.0.0.1:5103",
+        "Authentication__SigningKey": "bookflow-vscode-local-only-signing-key-2026",
+        "BookFlow__Mode": "Local",
+        "BookFlow__BlobRoot": "${workspaceFolder}/src/.local/blobs",
+        "BookFlow__PublicUrl": "http://127.0.0.1:5100",
+        "ConnectionStrings__BookFlow": "Data Source=${workspaceFolder}/src/BookFlow.WebApp/.bookflow-local.db;Default Timeout=30",
+        "Providers__BaseUrl": "http://127.0.0.1:5101/",
+        "Providers__Token": "bookflow-vscode-local-provider-token"
+      }
+    },
+    {
+      "name": "BookFlow Editor Assignment",
+      "type": "coreclr",
+      "request": "launch",
+      "program": "${workspaceFolder}/src/BookFlow.EditorAssignment/bin/Debug/net10.0/BookFlow.EditorAssignment.dll",
+      "cwd": "${workspaceFolder}/src/BookFlow.EditorAssignment",
+      "console": "integratedTerminal",
+      "stopAtEntry": false,
+      "env": {
+        "ASPNETCORE_ENVIRONMENT": "Development",
+        "ASPNETCORE_URLS": "http://127.0.0.1:5104",
+        "Authentication__SigningKey": "bookflow-vscode-local-only-signing-key-2026",
+        "BookFlow__Mode": "Local",
+        "BookFlow__BlobRoot": "${workspaceFolder}/src/.local/blobs",
+        "BookFlow__FrontendUrl": "http://127.0.0.1:5100/",
+        "ConnectionStrings__BookFlow": "Data Source=${workspaceFolder}/src/BookFlow.WebApp/.bookflow-local.db;Default Timeout=30",
+        "Providers__BaseUrl": "http://127.0.0.1:5101/",
+        "Providers__Token": "bookflow-vscode-local-provider-token"
+      }
+    },
+    {
+      "name": "BookFlow Proofprint Generation",
+      "type": "coreclr",
+      "request": "launch",
+      "program": "${workspaceFolder}/src/BookFlow.ProofprintGeneration/bin/Debug/net10.0/BookFlow.ProofprintGeneration.dll",
+      "cwd": "${workspaceFolder}/src/BookFlow.ProofprintGeneration",
+      "console": "integratedTerminal",
+      "stopAtEntry": false,
+      "env": {
+        "ASPNETCORE_ENVIRONMENT": "Development",
+        "ASPNETCORE_URLS": "http://127.0.0.1:5105",
+        "Authentication__SigningKey": "bookflow-vscode-local-only-signing-key-2026",
+        "BookFlow__Mode": "Local",
+        "BookFlow__BlobRoot": "${workspaceFolder}/src/.local/blobs",
+        "BookFlow__FrontendUrl": "http://127.0.0.1:5100/",
+        "ConnectionStrings__BookFlow": "Data Source=${workspaceFolder}/src/BookFlow.WebApp/.bookflow-local.db;Default Timeout=30",
+        "Providers__BaseUrl": "http://127.0.0.1:5101/",
+        "Providers__Token": "bookflow-vscode-local-provider-token"
+      }
+    },
+    {
+      "name": "BookFlow Inventory",
+      "type": "coreclr",
+      "request": "launch",
+      "program": "${workspaceFolder}/src/BookFlow.Inventory/bin/Debug/net10.0/BookFlow.Inventory.dll",
+      "cwd": "${workspaceFolder}/src/BookFlow.Inventory",
+      "console": "integratedTerminal",
+      "stopAtEntry": false,
+      "env": {
+        "ASPNETCORE_ENVIRONMENT": "Development",
+        "ASPNETCORE_URLS": "http://127.0.0.1:5106",
+        "Authentication__SigningKey": "bookflow-vscode-local-only-signing-key-2026",
+        "BookFlow__Mode": "Local",
+        "BookFlow__BlobRoot": "${workspaceFolder}/src/.local/blobs",
+        "ConnectionStrings__BookFlow": "Data Source=${workspaceFolder}/src/BookFlow.WebApp/.bookflow-local.db;Default Timeout=30"
+      }
+    },
+    {
+      "name": "BookFlow Print Demand Orders",
+      "type": "coreclr",
+      "request": "launch",
+      "program": "${workspaceFolder}/src/BookFlow.PrintDemandOrders/bin/Debug/net10.0/BookFlow.PrintDemandOrders.dll",
+      "cwd": "${workspaceFolder}/src/BookFlow.PrintDemandOrders",
+      "console": "integratedTerminal",
+      "stopAtEntry": false,
+      "env": {
+        "ASPNETCORE_ENVIRONMENT": "Development",
+        "ASPNETCORE_URLS": "http://127.0.0.1:5107",
+        "Authentication__SigningKey": "bookflow-vscode-local-only-signing-key-2026",
+        "BookFlow__Mode": "Local",
+        "BookFlow__BlobRoot": "${workspaceFolder}/src/.local/blobs",
+        "ConnectionStrings__BookFlow": "Data Source=${workspaceFolder}/src/BookFlow.WebApp/.bookflow-local.db;Default Timeout=30",
+        "Providers__BaseUrl": "http://127.0.0.1:5101/",
+        "Providers__Token": "bookflow-vscode-local-provider-token"
+      }
+    },
+    {
+      "name": "BookFlow Progress Tracking",
+      "type": "coreclr",
+      "request": "launch",
+      "program": "${workspaceFolder}/src/BookFlow.ProgressTracking/bin/Debug/net10.0/BookFlow.ProgressTracking.dll",
+      "cwd": "${workspaceFolder}/src/BookFlow.ProgressTracking",
+      "console": "integratedTerminal",
+      "stopAtEntry": false,
+      "env": {
+        "ASPNETCORE_ENVIRONMENT": "Development",
+        "ASPNETCORE_URLS": "http://127.0.0.1:5108",
+        "Authentication__SigningKey": "bookflow-vscode-local-only-signing-key-2026",
+        "BookFlow__Mode": "Local",
+        "BookFlow__BlobRoot": "${workspaceFolder}/src/.local/blobs",
+        "ConnectionStrings__BookFlow": "Data Source=${workspaceFolder}/src/BookFlow.WebApp/.bookflow-local.db;Default Timeout=30"
+      }
+    }
+  ]
+}
