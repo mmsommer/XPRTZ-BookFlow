@@ -44,8 +44,8 @@ public sealed class InventoryHandler(BookFlowDbContext db, IEventTransaction tra
             }
             if (message.EventType == EventTypes.Stock && message.Data.Sequence <= stock.Sequence)
                 throw new PermanentFailureException("Stale or conflicting stock sequence requires reconciliation.");
-            var entries = await db.Ledger.Where(x => x.BookId == book.Id && x.DistributorId == distributor).ToListAsync(token);
-            if (entries.Any(x => x.Sequence == message.Data.Sequence))
+            if (await db.Ledger.AnyAsync(x => x.BookId == book.Id && x.DistributorId == distributor &&
+                x.Sequence == message.Data.Sequence, token))
                 throw new PermanentFailureException("Conflicting inventory sequence.");
             var entry = new InventoryLedgerEntry
             {
@@ -53,29 +53,18 @@ public sealed class InventoryHandler(BookFlowDbContext db, IEventTransaction tra
                 EventType = message.EventType, Quantity = quantity, Sequence = message.Data.Sequence, RecordedAt = message.EventTime
             };
             db.Ledger.Add(entry);
-            entries.Add(entry);
-            var available = 0;
-            string? alert = null;
-            foreach (var change in entries.OrderBy(x => x.Sequence))
+            if (message.Data.Sequence > stock.Sequence)
             {
-                try { available = InventoryRules.AvailableAfter(change.EventType, available, change.Quantity); }
-                catch (PermanentFailureException) when (change.EventType is EventTypes.Sold or EventTypes.Distributed)
-                {
-                    throw new ConflictException("Inventory debit precedes its credit; retry or reconcile missing events.");
-                }
-                if (change.EventType is EventTypes.LowStock or EventTypes.Depleted)
-                    alert = change.EventType;
-                if (change.EventType is EventTypes.Delivered or EventTypes.Stock && available > options.Value.LowStockThreshold)
-                    alert = null;
+                ApplyChange(stock, entry, options.Value.LowStockThreshold);
+                stock.Sequence = entry.Sequence;
             }
-            stock.AvailableQuantity = available;
-            stock.PrintedQuantity = entries.Where(x => x.EventType == EventTypes.Printed).Sum(x => x.Quantity);
-            stock.DeliveredQuantity = entries.Where(x => x.EventType == EventTypes.Delivered).Sum(x => x.Quantity);
-            stock.DistributedQuantity = entries.Where(x => x.EventType == EventTypes.Distributed).Sum(x => x.Quantity);
-            stock.SoldQuantity = entries.Where(x => x.EventType == EventTypes.Sold).Sum(x => x.Quantity);
-            stock.Alert = alert;
-            stock.Sequence = entries.Max(x => x.Sequence);
-            stock.UpdatedAt = entries.Max(x => x.RecordedAt);
+            else
+            {
+                var entries = await db.Ledger.Where(x => x.BookId == book.Id && x.DistributorId == distributor)
+                    .ToListAsync(token);
+                entries.Add(entry);
+                RebuildStock(stock, entries, options.Value.LowStockThreshold);
+            }
             if (message.Data.PrintOrderId is { } orderId)
             {
                 var order = await db.PrintOrders.SingleOrDefaultAsync(x => x.Id == orderId && x.BookId == book.Id &&
@@ -90,5 +79,57 @@ public sealed class InventoryHandler(BookFlowDbContext db, IEventTransaction tra
                     order.Status = next;
             }
         }, ct);
+    }
+
+    private static void ApplyChange(StockRecord stock, InventoryLedgerEntry change, int lowStockThreshold)
+    {
+        try { stock.AvailableQuantity = InventoryRules.AvailableAfter(change.EventType, stock.AvailableQuantity, change.Quantity); }
+        catch (PermanentFailureException) when (change.EventType is EventTypes.Sold or EventTypes.Distributed)
+        {
+            throw new ConflictException("Inventory debit precedes its credit; retry or reconcile missing events.");
+        }
+
+        switch (change.EventType)
+        {
+            case EventTypes.Printed:
+                stock.PrintedQuantity = checked(stock.PrintedQuantity + change.Quantity);
+                break;
+            case EventTypes.Delivered:
+                stock.DeliveredQuantity = checked(stock.DeliveredQuantity + change.Quantity);
+                break;
+            case EventTypes.Distributed:
+                stock.DistributedQuantity = checked(stock.DistributedQuantity + change.Quantity);
+                break;
+            case EventTypes.Sold:
+                stock.SoldQuantity = checked(stock.SoldQuantity + change.Quantity);
+                break;
+            case EventTypes.LowStock:
+            case EventTypes.Depleted:
+                stock.Alert = change.EventType;
+                break;
+        }
+
+        if (change.EventType is EventTypes.Delivered or EventTypes.Stock &&
+            stock.AvailableQuantity > lowStockThreshold)
+            stock.Alert = null;
+        if (change.RecordedAt > stock.UpdatedAt)
+            stock.UpdatedAt = change.RecordedAt;
+    }
+
+    private static void RebuildStock(StockRecord stock, IEnumerable<InventoryLedgerEntry> entries, int lowStockThreshold)
+    {
+        stock.AvailableQuantity = 0;
+        stock.PrintedQuantity = 0;
+        stock.DeliveredQuantity = 0;
+        stock.DistributedQuantity = 0;
+        stock.SoldQuantity = 0;
+        stock.Sequence = 0;
+        stock.Alert = null;
+        stock.UpdatedAt = default;
+        foreach (var change in entries.OrderBy(x => x.Sequence))
+        {
+            ApplyChange(stock, change, lowStockThreshold);
+            stock.Sequence = Math.Max(stock.Sequence, change.Sequence);
+        }
     }
 }

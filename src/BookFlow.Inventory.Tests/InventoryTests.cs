@@ -43,6 +43,23 @@ public sealed class InventoryTests
     }
 
     [Fact]
+    public async Task Late_event_rebuilds_stock_in_sequence_order()
+    {
+        using var test = new TestDatabase();
+        var book = test.SeedBook();
+        var handler = new InventoryHandler(test.Db, new EventTransaction(test.Db), Options.Create(new InventoryOptions()));
+        await handler.HandleAsync(test.InventoryEvent(EventTypes.Stock, book, 1, 100), CancellationToken.None);
+        await handler.HandleAsync(test.InventoryEvent(EventTypes.Stock, book, 3, 80), CancellationToken.None);
+
+        await handler.HandleAsync(test.InventoryEvent(EventTypes.Delivered, book, 2, 50), CancellationToken.None);
+
+        var stock = test.Db.Stock.Single();
+        stock.AvailableQuantity.Should().Be(80);
+        stock.DeliveredQuantity.Should().Be(50);
+        stock.Sequence.Should().Be(3);
+    }
+
+    [Fact]
     public async Task Alerts_do_not_modify_available_quantity()
     {
         using var test = new TestDatabase();
