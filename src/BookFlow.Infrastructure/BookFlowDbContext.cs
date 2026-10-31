@@ -5,27 +5,49 @@ using Microsoft.EntityFrameworkCore.Design;
 
 namespace BookFlow.Infrastructure;
 
+/// <summary>Provides persistence for publishing workflows, inventory, and durable event delivery.</summary>
+/// <param name="options">The database context options.</param>
 public sealed class BookFlowDbContext(DbContextOptions<BookFlowDbContext> options) : DbContext(options)
 {
+    /// <summary>Provides access to registered participants.</summary>
     public DbSet<Participant> Participants => Set<Participant>();
+    /// <summary>Provides access to submitted manuscripts.</summary>
     public DbSet<Manuscript> Manuscripts => Set<Manuscript>();
+    /// <summary>Provides access to immutable manuscript versions.</summary>
     public DbSet<ManuscriptVersion> Versions => Set<ManuscriptVersion>();
+    /// <summary>Provides access to manuscript metadata records.</summary>
     public DbSet<ManuscriptMetadata> Metadata => Set<ManuscriptMetadata>();
+    /// <summary>Provides access to editor highlights on manuscript versions.</summary>
     public DbSet<ManuscriptHighlight> Highlights => Set<ManuscriptHighlight>();
+    /// <summary>Provides access to author feedback on manuscript versions.</summary>
     public DbSet<AuthorFeedback> Feedback => Set<AuthorFeedback>();
+    /// <summary>Provides access to sequenced workflow history entries.</summary>
     public DbSet<StatusHistory> History => Set<StatusHistory>();
+    /// <summary>Provides access to generated proofprint records.</summary>
     public DbSet<Proofprint> Proofprints => Set<Proofprint>();
+    /// <summary>Provides access to published books.</summary>
     public DbSet<Book> Books => Set<Book>();
+    /// <summary>Provides access to distributor print orders.</summary>
     public DbSet<PrintOrder> PrintOrders => Set<PrintOrder>();
+    /// <summary>Provides access to distributor stock projections.</summary>
     public DbSet<StockRecord> Stock => Set<StockRecord>();
+    /// <summary>Provides access to inventory ledger events.</summary>
     public DbSet<InventoryLedgerEntry> Ledger => Set<InventoryLedgerEntry>();
+    /// <summary>Provides access to committed events awaiting publication.</summary>
     public DbSet<OutboxMessage> Outbox => Set<OutboxMessage>();
+    /// <summary>Provides access to consumer event acknowledgements.</summary>
     public DbSet<InboxMessage> Inbox => Set<InboxMessage>();
+    /// <summary>Provides access to queued local event deliveries.</summary>
     public DbSet<LocalDelivery> LocalDeliveries => Set<LocalDelivery>();
+    /// <summary>Provides access to request deduplication records.</summary>
     public DbSet<IdempotencyRecord> Idempotency => Set<IdempotencyRecord>();
+    /// <summary>Provides access to recoverable blob upload reservations.</summary>
     public DbSet<UploadReservation> Uploads => Set<UploadReservation>();
+    /// <summary>Provides access to queued notification deliveries.</summary>
     public DbSet<NotificationDelivery> NotificationDeliveries => Set<NotificationDelivery>();
 
+    /// <summary>Adds a serialized domain event to the outbox for the next database save.</summary>
+    /// <param name="message">The domain event to process.</param>
     public void Enqueue(DomainEvent message)
     {
         message.Validate();
@@ -36,6 +58,8 @@ public sealed class BookFlowDbContext(DbContextOptions<BookFlowDbContext> option
         });
     }
 
+    /// <summary>Configures entity keys, relationships, indexes, and persistence constraints.</summary>
+    /// <param name="model">The builder used to configure entity mappings and constraints.</param>
     protected override void OnModelCreating(ModelBuilder model)
     {
         model.Entity<Participant>().HasKey(x => new { x.TenantId, x.Id });
@@ -102,8 +126,11 @@ public sealed class BookFlowDbContext(DbContextOptions<BookFlowDbContext> option
     }
 }
 
+/// <summary>Creates the SQL Server context used by Entity Framework design-time tools.</summary>
 public sealed class DesignTimeDbContextFactory : IDesignTimeDbContextFactory<BookFlowDbContext>
 {
+    /// <summary>Creates a SQL Server context for Entity Framework design-time operations.</summary>
+    /// <param name="args">The design-time command arguments.</param>
     public BookFlowDbContext CreateDbContext(string[] args) =>
         new(new DbContextOptionsBuilder<BookFlowDbContext>()
             .UseSqlServer("Server=localhost;Database=BookFlow;Integrated Security=true;TrustServerCertificate=true")

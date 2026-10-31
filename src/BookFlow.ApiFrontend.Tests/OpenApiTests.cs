@@ -12,8 +12,10 @@ using Moq.Protected;
 
 namespace BookFlow.ApiFrontend.Tests;
 
+/// <summary>Tests frontend OpenAPI composition and upstream failure handling.</summary>
 public sealed class OpenApiTests
 {
+    /// <summary>Verifies frontend composition includes concrete paths, components, and frontend errors.</summary>
     [Fact]
     public async Task Composes_concrete_application_paths_and_components_with_frontend_errors()
     {
@@ -61,6 +63,7 @@ public sealed class OpenApiTests
         await app.StopAsync();
     }
 
+    /// <summary>Verifies upstream failure does not return incomplete successful document.</summary>
     [Fact]
     public async Task Upstream_failure_does_not_return_incomplete_successful_document()
     {

@@ -10,8 +10,10 @@ using Moq;
 
 namespace BookFlow.WebApp.Tests;
 
+/// <summary>Tests application endpoint contracts, security, and operation identities.</summary>
 public sealed class OpenApiTests
 {
+    /// <summary>Verifies every application operation has contract security and unique identity.</summary>
     [Fact]
     public async Task Every_application_operation_has_contract_security_and_unique_identity()
     {

@@ -15,8 +15,10 @@ using Microsoft.Extensions.Options;
 
 namespace BookFlow.WebApp.Tests;
 
+/// <summary>Tests workflow behavior.</summary>
 public sealed class WorkflowTests
 {
+    /// <summary>Exercises upload, editing, revision, approval, printing, delivery, sale, and reprint end to end.</summary>
     [Fact]
     public async Task Upload_edit_revise_approve_print_deliver_sell_and_reprint_workflow()
     {

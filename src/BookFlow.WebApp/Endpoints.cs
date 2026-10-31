@@ -3,8 +3,11 @@ using BookFlow.Infrastructure;
 
 namespace BookFlow.WebApp;
 
+/// <summary>Maps tenant-scoped manuscript, book, participant, and inventory HTTP operations.</summary>
 public static class Endpoints
 {
+    /// <summary>Maps participant, manuscript, book, print-order, stock, and download endpoints.</summary>
+    /// <param name="app">The web application to configure.</param>
     public static void MapManuscripts(this WebApplication app)
     {
         var group = app.MapGroup("/api").RequireAuthorization();

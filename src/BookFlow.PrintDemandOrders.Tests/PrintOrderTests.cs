@@ -6,8 +6,11 @@ using Moq;
 
 namespace BookFlow.PrintDemandOrders.Tests;
 
+/// <summary>Tests print order behavior.</summary>
 public sealed class PrintOrderTests
 {
+    /// <summary>Verifies print events submit once with a stable key without creating stock.</summary>
+    /// <param name="type">The domain event type.</param>
     [Theory]
     [InlineData(EventTypes.Approved)]
     [InlineData(EventTypes.Order)]
@@ -35,6 +38,7 @@ public sealed class PrintOrderTests
         provider.Verify(x => x.OrderAsync(It.IsAny<PrintSubmission>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Once);
     }
 
+    /// <summary>Verifies invalid quantity does not contact provider.</summary>
     [Fact]
     public async Task Invalid_quantity_does_not_contact_provider()
     {

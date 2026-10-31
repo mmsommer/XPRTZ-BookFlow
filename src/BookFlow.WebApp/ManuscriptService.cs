@@ -10,8 +10,15 @@ using Microsoft.EntityFrameworkCore;
 
 namespace BookFlow.WebApp;
 
+/// <summary>Implements authorized manuscript, participant, book, and print-order workflows.</summary>
+/// <param name="db">The publishing workflow database context.</param>
+/// <param name="blobs">The manuscript and proofprint blob store.</param>
 public sealed class ManuscriptService(BookFlowDbContext db, IBlobStore blobs) : IManuscriptService
 {
+    /// <summary>Returns participant registration details after administrator authorization.</summary>
+    /// <param name="actor">The authenticated caller and tenant scope.</param>
+    /// <param name="id">The participant identifier within the caller's tenant.</param>
+    /// <param name="ct">Cancels the operation.</param>
     public async Task<ParticipantResponse> ParticipantAsync(Actor actor, string id, CancellationToken ct)
     {
         actor.Require("Admin");
@@ -20,6 +27,10 @@ public sealed class ManuscriptService(BookFlowDbContext db, IBlobStore blobs) : 
         return new ParticipantResponse(participant.Id, participant.Name, participant.Email, participant.Role, participant.Active);
     }
 
+    /// <summary>Registers a participant in the administrator's tenant.</summary>
+    /// <param name="actor">The authenticated caller and tenant scope.</param>
+    /// <param name="request">The participant registration details.</param>
+    /// <param name="ct">Cancels the operation.</param>
     public async Task RegisterAsync(Actor actor, CreateParticipantRequest request, CancellationToken ct)
     {
         actor.Require("Admin");
@@ -44,6 +55,10 @@ public sealed class ManuscriptService(BookFlowDbContext db, IBlobStore blobs) : 
         }
     }
 
+    /// <summary>Creates a manuscript and its immutable initial file, deduplicating matching retries.</summary>
+    /// <param name="actor">The authenticated caller and tenant scope.</param>
+    /// <param name="request">The manuscript title, publisher, initial file, and idempotency key.</param>
+    /// <param name="ct">Cancels the operation.</param>
     public async Task<ManuscriptResponse> CreateAsync(Actor actor, CreateManuscriptRequest request, CancellationToken ct)
     {
         actor.Require("Author");
@@ -81,6 +96,12 @@ public sealed class ManuscriptService(BookFlowDbContext db, IBlobStore blobs) : 
         return Map(manuscript);
     }
 
+    /// <summary>Creates an editor version or author revision with an immutable file and attached annotations.</summary>
+    /// <param name="actor">The authenticated caller and tenant scope.</param>
+    /// <param name="id">The manuscript identifier.</param>
+    /// <param name="request">The parent version, new file, feedback, highlights, and idempotency key.</param>
+    /// <param name="editor">Whether this is an editor version rather than an author revision.</param>
+    /// <param name="ct">Cancels the operation.</param>
     public async Task<VersionResponse> VersionAsync(Actor actor, Guid id, CreateVersionRequest request, bool editor, CancellationToken ct)
     {
         actor.Require(editor ? "Editor" : "Author");
@@ -148,6 +169,11 @@ public sealed class ManuscriptService(BookFlowDbContext db, IBlobStore blobs) : 
         return await MapVersionAsync(version, ct);
     }
 
+    /// <summary>Approves an editor-reviewed manuscript and creates its book and initial print order.</summary>
+    /// <param name="actor">The authenticated caller and tenant scope.</param>
+    /// <param name="id">The manuscript identifier.</param>
+    /// <param name="request">The ISBN, distributor, initial copy count, and idempotency key.</param>
+    /// <param name="ct">Cancels the operation.</param>
     public async Task<BookResponse> ApproveAsync(Actor actor, Guid id, ApproveManuscriptRequest request, CancellationToken ct)
     {
         actor.Require("Editor");
@@ -185,6 +211,10 @@ public sealed class ManuscriptService(BookFlowDbContext db, IBlobStore blobs) : 
         return Map(book);
     }
 
+    /// <summary>Creates an authorized additional print order and queues its request event.</summary>
+    /// <param name="actor">The authenticated caller and tenant scope.</param>
+    /// <param name="request">The book, distributor, additional copy count, and idempotency key.</param>
+    /// <param name="ct">Cancels the operation.</param>
     public async Task<PrintOrderResponse> OrderAsync(Actor actor, CreatePrintOrderRequest request, CancellationToken ct)
     {
         actor.Require("Publisher");
@@ -210,9 +240,16 @@ public sealed class ManuscriptService(BookFlowDbContext db, IBlobStore blobs) : 
         return Map(order);
     }
 
+    /// <summary>Returns a manuscript after enforcing caller and tenant authorization.</summary>
+    /// <param name="actor">The authenticated caller and tenant scope.</param>
+    /// <param name="id">The manuscript identifier.</param>
+    /// <param name="ct">Cancels the operation.</param>
     public async Task<ManuscriptResponse> GetAsync(Actor actor, Guid id, CancellationToken ct) =>
         Map(await AccessibleAsync(actor, id, ct));
 
+    /// <summary>Lists manuscripts visible to the caller.</summary>
+    /// <param name="actor">The authenticated caller and tenant scope.</param>
+    /// <param name="ct">Cancels the operation.</param>
     public async Task<IReadOnlyList<ManuscriptResponse>> ListAsync(Actor actor, CancellationToken ct)
     {
         var manuscripts = await db.Manuscripts.AsNoTracking().Where(x => x.TenantId == actor.TenantId &&
@@ -222,6 +259,10 @@ public sealed class ManuscriptService(BookFlowDbContext db, IBlobStore blobs) : 
         return manuscripts.Select(Map).ToArray();
     }
 
+    /// <summary>Returns a manuscript's versions with highlights, feedback, and proofprint identifiers.</summary>
+    /// <param name="actor">The authenticated caller and tenant scope.</param>
+    /// <param name="id">The manuscript identifier.</param>
+    /// <param name="ct">Cancels the operation.</param>
     public async Task<IReadOnlyList<VersionResponse>> VersionsAsync(Actor actor, Guid id, CancellationToken ct)
     {
         await AccessibleAsync(actor, id, ct);
@@ -248,6 +289,10 @@ public sealed class ManuscriptService(BookFlowDbContext db, IBlobStore blobs) : 
             proofprintByVersion.GetValueOrDefault(version.Id))).ToArray();
     }
 
+    /// <summary>Returns the authorized manuscript's sequenced workflow history.</summary>
+    /// <param name="actor">The authenticated caller and tenant scope.</param>
+    /// <param name="id">The manuscript identifier.</param>
+    /// <param name="ct">Cancels the operation.</param>
     public async Task<IReadOnlyList<HistoryResponse>> HistoryAsync(Actor actor, Guid id, CancellationToken ct)
     {
         await AccessibleAsync(actor, id, ct);
@@ -255,6 +300,9 @@ public sealed class ManuscriptService(BookFlowDbContext db, IBlobStore blobs) : 
             .Select(x => new HistoryResponse(x.EventId, x.Sequence, x.Status, x.ChangedAt)).ToListAsync(ct);
     }
 
+    /// <summary>Lists published books visible to the caller.</summary>
+    /// <param name="actor">The authenticated caller and tenant scope.</param>
+    /// <param name="ct">Cancels the operation.</param>
     public async Task<IReadOnlyList<BookResponse>> BooksAsync(Actor actor, CancellationToken ct)
     {
         return await AuthorizedBooks(actor).OrderBy(x => x.Id)
@@ -262,11 +310,19 @@ public sealed class ManuscriptService(BookFlowDbContext db, IBlobStore blobs) : 
             .ToListAsync(ct);
     }
 
+    /// <summary>Returns a published book after enforcing caller and tenant authorization.</summary>
+    /// <param name="actor">The authenticated caller and tenant scope.</param>
+    /// <param name="id">The published book identifier.</param>
+    /// <param name="ct">Cancels the operation.</param>
     public async Task<BookResponse> BookAsync(Actor actor, Guid id, CancellationToken ct) =>
         await AuthorizedBooks(actor).Where(x => x.Id == id)
             .Select(x => new BookResponse(x.Id, x.ManuscriptId, x.Title, x.Isbn, x.Orderable))
             .SingleOrDefaultAsync(ct) ?? throw new NotFoundException();
 
+    /// <summary>Returns an authorized print order and its provider tracking state.</summary>
+    /// <param name="actor">The authenticated caller and tenant scope.</param>
+    /// <param name="id">The print order identifier.</param>
+    /// <param name="ct">Cancels the operation.</param>
     public async Task<PrintOrderResponse> GetOrderAsync(Actor actor, Guid id, CancellationToken ct)
     {
         var order = await db.PrintOrders.SingleOrDefaultAsync(x => x.Id == id, ct) ?? throw new NotFoundException();
@@ -276,6 +332,10 @@ public sealed class ManuscriptService(BookFlowDbContext db, IBlobStore blobs) : 
         return Map(order);
     }
 
+    /// <summary>Returns authorized stock projections for a book.</summary>
+    /// <param name="actor">The authenticated caller and tenant scope.</param>
+    /// <param name="bookId">The book identifier.</param>
+    /// <param name="ct">Cancels the operation.</param>
     public async Task<IReadOnlyList<StockResponse>> StockAsync(Actor actor, Guid bookId, CancellationToken ct)
     {
         await AccessibleBookAsync(actor, bookId, ct);
@@ -285,6 +345,12 @@ public sealed class ManuscriptService(BookFlowDbContext db, IBlobStore blobs) : 
             .ToListAsync(ct);
     }
 
+    /// <summary>Downloads an authorized manuscript version or proofprint file.</summary>
+    /// <param name="actor">The authenticated caller and tenant scope.</param>
+    /// <param name="manuscriptId">The manuscript identifier used for authorization.</param>
+    /// <param name="fileId">The version or proofprint identifier.</param>
+    /// <param name="proofprint">Whether to download a proofprint rather than a manuscript version.</param>
+    /// <param name="ct">Cancels the operation.</param>
     public async Task<byte[]> FileAsync(Actor actor, Guid manuscriptId, Guid fileId, bool proofprint, CancellationToken ct)
     {
         await AccessibleAsync(actor, manuscriptId, ct);
@@ -437,6 +503,8 @@ public sealed class ManuscriptService(BookFlowDbContext db, IBlobStore blobs) : 
             throw new ArgumentException("Invalid print quantity.");
     }
 
+    /// <summary>Validates the thirteen-digit ISBN and its checksum.</summary>
+    /// <param name="isbn">The thirteen-digit ISBN to validate.</param>
     public static void ValidateIsbn(string isbn)
     {
         if (isbn.Length != 13 || isbn.Any(x => !char.IsAsciiDigit(x)) ||

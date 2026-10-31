@@ -9,8 +9,10 @@ using Microsoft.OpenApi;
 
 namespace BookFlow.Infrastructure.Tests;
 
+/// <summary>Tests OpenAPI security and development provider body contracts.</summary>
 public sealed class OpenApiTests
 {
+    /// <summary>Verifies anonymous and provider operations have correct security and raw body contract.</summary>
     [Fact]
     public async Task Anonymous_and_provider_operations_have_correct_security_and_raw_body_contract()
     {

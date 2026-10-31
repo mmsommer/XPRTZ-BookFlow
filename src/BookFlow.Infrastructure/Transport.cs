@@ -11,13 +11,22 @@ using Microsoft.Extensions.Logging;
 
 namespace BookFlow.Infrastructure;
 
+/// <summary>Publishes committed domain events to their transport.</summary>
 public interface IEventPublisher
 {
+    /// <summary>Publishes a committed domain event.</summary>
+    /// <param name="message">The domain event to process.</param>
+    /// <param name="ct">Cancels the operation.</param>
     Task PublishAsync(DomainEvent message, CancellationToken ct);
 }
 
+/// <summary>Publishes domain events to Azure Event Grid.</summary>
+/// <param name="client">The Azure Event Grid publishing client.</param>
 public sealed class AzureEventPublisher(EventGridPublisherClient client) : IEventPublisher
 {
+    /// <summary>Publishes a committed domain event.</summary>
+    /// <param name="message">The domain event to process.</param>
+    /// <param name="ct">Cancels the operation.</param>
     public async Task PublishAsync(DomainEvent message, CancellationToken ct)
     {
         var envelope = new EventGridEvent(message.Subject, message.EventType, message.DataVersion,
@@ -30,10 +39,17 @@ public sealed class AzureEventPublisher(EventGridPublisherClient client) : IEven
     }
 }
 
+/// <summary>Queues local consumer deliveries and forwards notification events.</summary>
+/// <param name="db">The publishing workflow database context.</param>
+/// <param name="client">The HTTP client for provider requests or local notification forwarding.</param>
 public sealed class LocalEventPublisher(BookFlowDbContext db, HttpClient client) : IEventPublisher, IDisposable
 {
+    /// <summary>Disposes the HTTP client used for local event forwarding.</summary>
     public void Dispose() => client.Dispose();
 
+    /// <summary>Publishes a committed domain event.</summary>
+    /// <param name="message">The domain event to process.</param>
+    /// <param name="ct">Cancels the operation.</param>
     public async Task PublishAsync(DomainEvent message, CancellationToken ct)
     {
         foreach (var (consumer, types) in EventTypes.Subscriptions)
@@ -57,8 +73,13 @@ public sealed class LocalEventPublisher(BookFlowDbContext db, HttpClient client)
     }
 }
 
+/// <summary>Publishes leased outbox messages and persists retry or dead-letter state.</summary>
+/// <param name="scopes">The factory for per-operation service scopes.</param>
+/// <param name="logger">The logger for processing and dependency failures.</param>
 public sealed class OutboxWorker(IServiceScopeFactory scopes, ILogger<OutboxWorker> logger) : BackgroundService
 {
+    /// <summary>Processes queued events until background service cancellation.</summary>
+    /// <param name="stoppingToken">Cancels processing when the background service stops.</param>
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         while (!stoppingToken.IsCancellationRequested)
@@ -118,8 +139,14 @@ public sealed class OutboxWorker(IServiceScopeFactory scopes, ILogger<OutboxWork
     }
 }
 
+/// <summary>Processes locally queued deliveries for one consumer.</summary>
+/// <param name="scopes">The factory for per-operation service scopes.</param>
+/// <param name="consumer">The consumer name used for routing and deduplication.</param>
+/// <param name="logger">The logger for processing and dependency failures.</param>
 public sealed class LocalEventWorker(IServiceScopeFactory scopes, string consumer, ILogger<LocalEventWorker> logger) : BackgroundService
 {
+    /// <summary>Processes queued events until background service cancellation.</summary>
+    /// <param name="stoppingToken">Cancels processing when the background service stops.</param>
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         while (!stoppingToken.IsCancellationRequested)
@@ -165,9 +192,17 @@ public sealed class LocalEventWorker(IServiceScopeFactory scopes, string consume
     }
 }
 
+/// <summary>Receives and processes Azure Service Bus events for one consumer subscription.</summary>
+/// <param name="client">The Azure Service Bus client.</param>
+/// <param name="scopes">The factory for per-operation service scopes.</param>
+/// <param name="topic">The Service Bus topic name.</param>
+/// <param name="consumer">The consumer name used for routing and deduplication.</param>
+/// <param name="logger">The logger for processing and dependency failures.</param>
 public sealed class AzureEventWorker(ServiceBusClient client, IServiceScopeFactory scopes,
     string topic, string consumer, ILogger<AzureEventWorker> logger) : BackgroundService
 {
+    /// <summary>Processes queued events until background service cancellation.</summary>
+    /// <param name="stoppingToken">Cancels processing when the background service stops.</param>
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         await using var processor = client.CreateProcessor(topic, consumer, new ServiceBusProcessorOptions

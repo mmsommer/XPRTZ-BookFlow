@@ -4,11 +4,20 @@ using Microsoft.EntityFrameworkCore;
 
 namespace BookFlow.ProofprintGeneration;
 
+/// <summary>Generates and stores a version's proofprint before publishing its availability.</summary>
+/// <param name="db">The publishing workflow database context.</param>
+/// <param name="transaction">The deduplicating consumer transaction service.</param>
+/// <param name="blobs">The manuscript and proofprint blob store.</param>
+/// <param name="provider">The print provider used for proofprints or print orders.</param>
 public sealed class ProofprintHandler(BookFlowDbContext db, IEventTransaction transaction,
     IBlobStore blobs, IPrintProvider provider) : IEventHandler
 {
+    /// <summary>The event consumer name.</summary>
     public string Consumer => "proofprint-generation";
 
+    /// <summary>Stores the event version's PDF proofprint and queues its creation event.</summary>
+    /// <param name="message">The domain event to process.</param>
+    /// <param name="ct">Cancels the operation.</param>
     public async Task HandleAsync(DomainEvent message, CancellationToken ct)
     {
         EventLookup.RequireType(message, EventTypes.Uploaded, EventTypes.Edited, EventTypes.Revised);

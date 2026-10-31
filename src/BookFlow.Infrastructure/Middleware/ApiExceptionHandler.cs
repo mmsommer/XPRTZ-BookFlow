@@ -7,8 +7,14 @@ using Microsoft.Extensions.Logging;
 
 namespace BookFlow.Infrastructure.Middleware;
 
+/// <summary>Maps application and dependency failures to HTTP Problem Details responses.</summary>
+/// <param name="logger">The logger for processing and dependency failures.</param>
 public sealed class ApiExceptionHandler(ILogger<ApiExceptionHandler> logger) : IExceptionHandler
 {
+    /// <summary>Writes a Problem Details response for an application or dependency exception.</summary>
+    /// <param name="context">The HTTP context receiving the error response.</param>
+    /// <param name="exception">The exception to map to a Problem Details response.</param>
+    /// <param name="ct">Cancels the operation.</param>
     public async ValueTask<bool> TryHandleAsync(HttpContext context, Exception exception, CancellationToken ct)
     {
         var (status, title) = exception switch

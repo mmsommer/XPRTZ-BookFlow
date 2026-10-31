@@ -4,10 +4,18 @@ using Microsoft.EntityFrameworkCore;
 
 namespace BookFlow.PrintDemandOrders;
 
+/// <summary>Submits idempotent print orders for approval and print-request events.</summary>
+/// <param name="db">The publishing workflow database context.</param>
+/// <param name="transaction">The deduplicating consumer transaction service.</param>
+/// <param name="provider">The print provider used for proofprints or print orders.</param>
 public sealed class PrintOrderHandler(BookFlowDbContext db, IEventTransaction transaction, IPrintProvider provider) : IEventHandler
 {
+    /// <summary>The event consumer name.</summary>
     public string Consumer => "print-demand-orders";
 
+    /// <summary>Submits the event's print order once and records the provider reference.</summary>
+    /// <param name="message">The domain event to process.</param>
+    /// <param name="ct">Cancels the operation.</param>
     public async Task HandleAsync(DomainEvent message, CancellationToken ct)
     {
         EventLookup.RequireType(message, EventTypes.Approved, EventTypes.Order);

@@ -7,8 +7,10 @@ using Microsoft.Extensions.Options;
 
 namespace BookFlow.Inventory.Tests;
 
+/// <summary>Tests inventory behavior.</summary>
 public sealed class InventoryTests
 {
+    /// <summary>Verifies absolute report and delta redelivery do not double subtract.</summary>
     [Fact]
     public async Task Absolute_report_and_delta_redelivery_do_not_double_subtract()
     {
@@ -26,6 +28,7 @@ public sealed class InventoryTests
         test.Db.Ledger.Should().HaveCount(3);
     }
 
+    /// <summary>Verifies out of order credits are reconciled and do not regress sequence.</summary>
     [Fact]
     public async Task Out_of_order_credits_are_reconciled_and_do_not_regress_sequence()
     {
@@ -42,6 +45,7 @@ public sealed class InventoryTests
         stock.DeliveredQuantity.Should().Be(50);
     }
 
+    /// <summary>Verifies late event rebuilds stock in sequence order.</summary>
     [Fact]
     public async Task Late_event_rebuilds_stock_in_sequence_order()
     {
@@ -59,6 +63,7 @@ public sealed class InventoryTests
         stock.Sequence.Should().Be(3);
     }
 
+    /// <summary>Verifies alerts do not modify available quantity.</summary>
     [Fact]
     public async Task Alerts_do_not_modify_available_quantity()
     {
@@ -71,6 +76,7 @@ public sealed class InventoryTests
         test.Db.Stock.Single().Alert.Should().Be(EventTypes.LowStock);
     }
 
+    /// <summary>Verifies unrouted events are rejected without opening a transaction.</summary>
     [Fact]
     public async Task Rejects_unrouted_event_without_running_transaction()
     {
@@ -83,11 +89,13 @@ public sealed class InventoryTests
         transaction.VerifyNoOtherCalls();
     }
 
+    /// <summary>Verifies debit cannot make inventory negative.</summary>
     [Fact]
     public void Debit_cannot_make_inventory_negative() =>
         FluentActions.Invoking(() => InventoryRules.AvailableAfter(EventTypes.Sold, 10, 11))
             .Should().Throw<PermanentFailureException>();
 
+    /// <summary>Verifies low stock threshold is configurable and exact.</summary>
     [Fact]
     public async Task Low_stock_threshold_is_configurable_and_exact()
     {

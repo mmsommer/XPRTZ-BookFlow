@@ -5,15 +5,28 @@ using BookFlow.Core;
 
 namespace BookFlow.LocalProviders;
 
+/// <summary>Records idempotent calls to development-only provider test doubles.</summary>
 public interface IDevelopmentProvider
 {
+    /// <summary>Records a provider call or returns its matching retry's stable reference.</summary>
+    /// <param name="key">The stable idempotency key for this operation.</param>
+    /// <param name="request">The provider request bytes used to verify matching retries.</param>
+    /// <param name="operation">The development provider operation name.</param>
+    /// <param name="ct">Cancels the operation.</param>
     Task<string> RecordAsync(string key, byte[] request, string operation, CancellationToken ct);
 }
 
+/// <summary>Persists development provider request fingerprints and stable response references.</summary>
+/// <param name="root">The local storage root directory.</param>
 public sealed class DevelopmentProvider(string root) : IDevelopmentProvider
 {
     private readonly SemaphoreSlim gate = new(1, 1);
 
+    /// <summary>Records a provider call or returns its matching retry's stable reference.</summary>
+    /// <param name="key">The stable idempotency key for this operation.</param>
+    /// <param name="request">The provider request bytes used to verify matching retries.</param>
+    /// <param name="operation">The development provider operation name.</param>
+    /// <param name="ct">Cancels the operation.</param>
     public async Task<string> RecordAsync(string key, byte[] request, string operation, CancellationToken ct)
     {
         if (string.IsNullOrWhiteSpace(key) || key.Length > 300)
@@ -42,6 +55,7 @@ public sealed class DevelopmentProvider(string root) : IDevelopmentProvider
 
     private sealed record ProviderCall(string Hash, string Reference, string Operation);
 
+    /// <summary>Creates a synthetic, single-page PDF for development proofprint requests.</summary>
     public static byte[] Pdf()
     {
         var output = new StringBuilder("%PDF-1.4\n");

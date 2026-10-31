@@ -3,8 +3,14 @@ using Microsoft.OpenApi;
 
 namespace BookFlow.ApiFrontend;
 
+/// <summary>Composes private application OpenAPI paths and schemas into the frontend document.</summary>
+/// <param name="clients">The factory for configured private-service HTTP clients.</param>
 public sealed class FrontendOpenApiTransformer(IHttpClientFactory clients) : IOpenApiDocumentTransformer
 {
+    /// <summary>Merges private application paths and components into the frontend OpenAPI document.</summary>
+    /// <param name="document">The frontend OpenAPI document to update.</param>
+    /// <param name="context">The OpenAPI document transformation context.</param>
+    /// <param name="ct">Cancels the operation.</param>
     public async Task TransformAsync(OpenApiDocument document, OpenApiDocumentTransformerContext context, CancellationToken ct)
     {
         using var response = await clients.CreateClient("webapp").GetAsync("openapi/v1.json", ct);

@@ -9,8 +9,10 @@ using Moq;
 
 namespace BookFlow.Notifications.Tests;
 
+/// <summary>Tests notification behavior.</summary>
 public sealed class NotificationTests
 {
+    /// <summary>Verifies approval schedules author email and publisher api once.</summary>
     [Fact]
     public async Task Approval_schedules_author_email_and_publisher_api_once()
     {
@@ -27,6 +29,7 @@ public sealed class NotificationTests
         notifications.Should().Contain(x => x.PublisherApi && x.Destination == "publisher" && x.Template == "book-orderable");
     }
 
+    /// <summary>Verifies webhook events are accepted durably before recipient resolution.</summary>
     [Fact]
     public async Task Accepts_webhook_durably_before_recipient_resolution()
     {
@@ -40,6 +43,7 @@ public sealed class NotificationTests
         test.Db.LocalDeliveries.Should().ContainSingle().Which.Completed.Should().BeFalse();
     }
 
+    /// <summary>Verifies malformed notification is rejected before acknowledgement.</summary>
     [Fact]
     public async Task Malformed_notification_is_rejected_before_acknowledgement()
     {
@@ -51,6 +55,7 @@ public sealed class NotificationTests
         test.Db.LocalDeliveries.Should().BeEmpty();
     }
 
+    /// <summary>Verifies provider failure is persisted and not marked sent.</summary>
     [Fact]
     public async Task Provider_failure_is_persisted_and_not_marked_sent()
     {
@@ -78,6 +83,7 @@ public sealed class NotificationTests
         provider.Verify(x => x.SendAsync(message, "notification-key", It.IsAny<CancellationToken>()), Times.Once);
     }
 
+    /// <summary>Verifies sender selects due delivery after future retry rows.</summary>
     [Fact]
     public async Task Sender_selects_due_delivery_after_future_retry_rows()
     {
@@ -115,6 +121,7 @@ public sealed class NotificationTests
         delivery.LeaseId.Should().BeNull();
     }
 
+    /// <summary>Verifies unapproved publisher listing hosts are rejected.</summary>
     [Fact]
     public async Task Rejects_unapproved_listing_host()
     {

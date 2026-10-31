@@ -5,8 +5,14 @@ using Microsoft.Extensions.Options;
 
 namespace BookFlow.Inventory;
 
+/// <summary>Provides inventory calculation rules shared by inventory event processing.</summary>
 public static class InventoryRules
 {
+    /// <summary>Calculates available inventory after applying an event quantity.</summary>
+    /// <param name="type">The inventory event type.</param>
+    /// <param name="current">The available quantity before the event.</param>
+    /// <param name="quantity">The quantity associated with the event.</param>
+    /// <returns>The available quantity after the event.</returns>
     public static int AvailableAfter(string type, int current, int quantity) => type switch
     {
         EventTypes.Delivered => checked(current + quantity),
@@ -18,10 +24,19 @@ public static class InventoryRules
     };
 }
 
+/// <summary>Processes inventory events and updates stock, ledger, and print-order state.</summary>
+/// <param name="db">The database context used to read and update inventory data.</param>
+/// <param name="transaction">The transaction coordinator for event processing.</param>
+/// <param name="options">The configured inventory thresholds.</param>
 public sealed class InventoryHandler(BookFlowDbContext db, IEventTransaction transaction, IOptions<InventoryOptions> options) : IEventHandler
 {
+    /// <summary>Gets the consumer name used to identify inventory event processing.</summary>
     public string Consumer => "inventory";
 
+    /// <summary>Validates and applies an inventory-related domain event.</summary>
+    /// <param name="message">The domain event to process.</param>
+    /// <param name="ct">A token used to cancel asynchronous database operations.</param>
+    /// <returns>A task that completes when the event has been processed.</returns>
     public Task HandleAsync(DomainEvent message, CancellationToken ct)
     {
         EventLookup.RequireType(message, EventTypes.Subscriptions[Consumer]);

@@ -7,8 +7,14 @@ using Microsoft.Extensions.Logging;
 
 namespace BookFlow.Infrastructure;
 
+/// <summary>Sends provider HTTP requests with bounded retries for transient failures.</summary>
+/// <param name="client">The HTTP client for provider requests or local notification forwarding.</param>
+/// <param name="logger">The logger for processing and dependency failures.</param>
 public sealed class ProviderHttp(HttpClient client, ILogger<ProviderHttp> logger)
 {
+    /// <summary>Sends a fresh request with up to two retries for transient provider failures.</summary>
+    /// <param name="requestFactory">Creates a fresh HTTP request for each provider attempt.</param>
+    /// <param name="ct">Cancels the operation.</param>
     public async Task<HttpResponseMessage> SendAsync(
         Func<HttpRequestMessage> requestFactory, CancellationToken ct)
     {
@@ -41,8 +47,14 @@ public sealed class ProviderHttp(HttpClient client, ILogger<ProviderHttp> logger
     }
 }
 
+/// <summary>Calls the HTTP print provider and validates returned proofprint PDFs and order references.</summary>
+/// <param name="http">The provider HTTP client with transient-failure retries.</param>
 public sealed class HttpPrintProvider(ProviderHttp http) : IPrintProvider
 {
+    /// <summary>Generates a PDF proofprint using a stable idempotency key.</summary>
+    /// <param name="manuscript">The manuscript file bytes to render.</param>
+    /// <param name="key">The stable idempotency key for this operation.</param>
+    /// <param name="ct">Cancels the operation.</param>
     public async Task<byte[]> GenerateProofprintAsync(byte[] manuscript, string key, CancellationToken ct)
     {
         using var response = await http.SendAsync(() =>
@@ -60,6 +72,10 @@ public sealed class HttpPrintProvider(ProviderHttp http) : IPrintProvider
         return bytes;
     }
 
+    /// <summary>Submits an idempotent print order and returns its provider reference.</summary>
+    /// <param name="submission">The book, distributor, and copy count to print.</param>
+    /// <param name="key">The stable idempotency key for this operation.</param>
+    /// <param name="ct">Cancels the operation.</param>
     public async Task<string> OrderAsync(PrintSubmission submission, string key, CancellationToken ct)
     {
         using var response = await http.SendAsync(() =>
@@ -79,10 +95,17 @@ public sealed class HttpPrintProvider(ProviderHttp http) : IPrintProvider
 }
 
 /// <summary>An external print provider's stable order reference.</summary>
+/// <param name="Reference">The print provider's stable order reference.</param>
 public sealed record PrintProviderResponse(string Reference);
 
+/// <summary>Sends email and publisher notifications through the HTTP provider.</summary>
+/// <param name="http">The provider HTTP client with transient-failure retries.</param>
 public sealed class HttpNotificationProvider(ProviderHttp http) : INotificationProvider
 {
+    /// <summary>Sends a notification using a stable idempotency key.</summary>
+    /// <param name="message">The notification recipient, template, and link.</param>
+    /// <param name="key">The stable idempotency key for this operation.</param>
+    /// <param name="ct">Cancels the operation.</param>
     public async Task SendAsync(NotificationMessage message, string key, CancellationToken ct)
     {
         using var response = await http.SendAsync(() =>

@@ -9,8 +9,10 @@ using Moq.Protected;
 
 namespace BookFlow.ApiFrontend.Tests;
 
+/// <summary>Tests frontend behavior.</summary>
 public sealed class FrontendTests
 {
+    /// <summary>Verifies callback is durably accepted once.</summary>
     [Fact]
     public async Task Callback_is_durably_accepted_once()
     {
@@ -24,6 +26,7 @@ public sealed class FrontendTests
         test.Db.Idempotency.Should().ContainSingle();
     }
 
+    /// <summary>Verifies distributor cannot report another distributors stock.</summary>
     [Fact]
     public async Task Distributor_cannot_report_another_distributors_stock()
     {
@@ -37,6 +40,7 @@ public sealed class FrontendTests
         test.Db.Outbox.Should().BeEmpty();
     }
 
+    /// <summary>Verifies reusing callback id with different quantity is a conflict.</summary>
     [Fact]
     public async Task Reusing_callback_id_with_different_quantity_is_a_conflict()
     {
@@ -50,6 +54,7 @@ public sealed class FrontendTests
             .Should().ThrowAsync<ConflictException>();
     }
 
+    /// <summary>Verifies forwarding reports dependency failure instead of success.</summary>
     [Fact]
     public async Task Forwarding_reports_dependency_failure_instead_of_success()
     {

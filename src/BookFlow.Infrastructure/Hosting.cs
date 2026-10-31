@@ -22,8 +22,13 @@ using Microsoft.Data.SqlClient;
 
 namespace BookFlow.Infrastructure;
 
+/// <summary>Configures BookFlow persistence, authentication, providers, and event workers.</summary>
 public static class Hosting
 {
+    /// <summary>Registers persistence, authentication, blob storage, and optional event workers.</summary>
+    /// <param name="builder">The application builder to configure.</param>
+    /// <param name="outbox">Whether to register the background outbox publisher.</param>
+    /// <param name="consumer">The consumer name used for routing and deduplication.</param>
     public static void AddBookFlow(this WebApplicationBuilder builder, bool outbox = false, string? consumer = null)
     {
         var config = builder.Configuration;
@@ -118,6 +123,8 @@ public static class Hosting
         }
     }
 
+    /// <summary>Initializes local persistence and enables BookFlow exception handling and authentication.</summary>
+    /// <param name="app">The web application to configure.</param>
     public static async Task UseBookFlowAsync(this WebApplication app)
     {
         app.UseExceptionHandler();
@@ -235,6 +242,8 @@ public static class Hosting
         await db.SaveChangesAsync();
     }
 
+    /// <summary>Reads the participant identity, tenant, and role from authenticated claims.</summary>
+    /// <param name="principal">The authenticated claims principal.</param>
     public static Actor GetActor(ClaimsPrincipal principal)
     {
         var id = principal.FindFirstValue("oid");
@@ -246,11 +255,16 @@ public static class Hosting
         return new Actor(id, tenantId, roles[0]);
     }
 
+    /// <summary>Returns a required configuration value or fails when it is missing.</summary>
+    /// <param name="config">The application configuration.</param>
+    /// <param name="key">The required configuration key.</param>
     public static string Required(IConfiguration config, string key) =>
         string.IsNullOrWhiteSpace(config[key])
             ? throw new InvalidOperationException($"Required configuration '{key}' is missing.")
             : config[key]!;
 
+    /// <summary>Creates validation parameters for signed development JWTs.</summary>
+    /// <param name="config">The application configuration.</param>
     public static TokenValidationParameters LocalTokenValidation(IConfiguration config) => new()
     {
         ValidateIssuer = true, ValidIssuer = "bookflow-local",
@@ -269,6 +283,11 @@ public static class Hosting
         return key;
     }
 
+    /// <summary>Creates a short-lived development JWT for the specified participant.</summary>
+    /// <param name="config">The application configuration.</param>
+    /// <param name="id">The participant identifier placed in the JWT.</param>
+    /// <param name="tenant">The publisher tenant identifier.</param>
+    /// <param name="role">The required authorization role.</param>
     public static string LocalToken(IConfiguration config, string id, Guid tenant, string role) =>
         new JwtSecurityTokenHandler().WriteToken(new JwtSecurityToken(
             "bookflow-local", "bookflow",
@@ -285,6 +304,9 @@ public static class Hosting
         return client;
     }
 
+    /// <summary>Registers configured HTTP print and notification provider clients.</summary>
+    /// <param name="services">The application's service collection.</param>
+    /// <param name="config">The application configuration.</param>
     public static void AddProvider(this IServiceCollection services, IConfiguration config)
     {
         services.AddHttpClient<ProviderHttp>(client =>

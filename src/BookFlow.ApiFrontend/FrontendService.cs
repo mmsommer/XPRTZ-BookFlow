@@ -4,14 +4,29 @@ using BookFlow.Core;
 
 namespace BookFlow.ApiFrontend;
 
+/// <summary>Forwards application requests and notification events to private services.</summary>
 public interface IFrontendService
 {
+    /// <summary>Forwards an application request, query, body, and authorization to the private WebApp.</summary>
+    /// <param name="request">The incoming application HTTP request.</param>
+    /// <param name="path">The private application endpoint path.</param>
+    /// <param name="ct">Cancels the operation.</param>
     Task<HttpResponseMessage> ProxyAsync(HttpRequest request, string path, CancellationToken ct);
+    /// <summary>Validates and forwards notification events to private notification ingress.</summary>
+    /// <param name="events">The Event Grid notification envelopes.</param>
+    /// <param name="authorization">The authorization header forwarded to notification ingress.</param>
+    /// <param name="ct">Cancels the operation.</param>
     Task ForwardNotificationsAsync(JsonElement[] events, string authorization, CancellationToken ct);
 }
 
+/// <summary>Proxies application requests and forwards validated notification batches.</summary>
+/// <param name="clients">The factory for configured private-service HTTP clients.</param>
 public sealed class FrontendService(IHttpClientFactory clients) : IFrontendService
 {
+    /// <summary>Forwards an application request, query, body, and authorization to the private WebApp.</summary>
+    /// <param name="request">The incoming application HTTP request.</param>
+    /// <param name="path">The private application endpoint path.</param>
+    /// <param name="ct">Cancels the operation.</param>
     public async Task<HttpResponseMessage> ProxyAsync(HttpRequest request, string path, CancellationToken ct)
     {
         using var forwarded = new HttpRequestMessage(new HttpMethod(request.Method), path + request.QueryString);
@@ -26,6 +41,10 @@ public sealed class FrontendService(IHttpClientFactory clients) : IFrontendServi
         return await clients.CreateClient("webapp").SendAsync(forwarded, HttpCompletionOption.ResponseHeadersRead, ct);
     }
 
+    /// <summary>Validates and forwards notification events to private notification ingress.</summary>
+    /// <param name="events">The Event Grid notification envelopes.</param>
+    /// <param name="authorization">The authorization header forwarded to notification ingress.</param>
+    /// <param name="ct">Cancels the operation.</param>
     public async Task ForwardNotificationsAsync(JsonElement[] events, string authorization, CancellationToken ct)
     {
         var messages = events.Select(x => x.Deserialize<DomainEvent>(EventJson.Options)

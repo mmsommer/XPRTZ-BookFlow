@@ -16,6 +16,7 @@ namespace BookFlow.Infrastructure.Migrations
     partial class AddQueueRetryTicks
     {
         /// <inheritdoc />
+        /// <param name="modelBuilder">The builder used to configure this migration's target model.</param>
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618

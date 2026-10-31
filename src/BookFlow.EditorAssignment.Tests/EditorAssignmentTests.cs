@@ -6,8 +6,10 @@ using Moq;
 
 namespace BookFlow.EditorAssignment.Tests;
 
+/// <summary>Tests editor assignment behavior.</summary>
 public sealed class EditorAssignmentTests
 {
+    /// <summary>Verifies redelivery assigns an editor once and emits one outbox event.</summary>
     [Fact]
     public async Task Assigns_once_and_emits_one_outbox_event_on_redelivery()
     {
@@ -29,6 +31,7 @@ public sealed class EditorAssignmentTests
         policy.Verify(x => x.SelectAsync(test.TenantId, It.IsAny<CancellationToken>()), Times.Once);
     }
 
+    /// <summary>Verifies selection chooses the least-loaded active editor with deterministic ties.</summary>
     [Fact]
     public async Task Chooses_least_loaded_active_editor_with_deterministic_tie_breaking()
     {
@@ -41,6 +44,7 @@ public sealed class EditorAssignmentTests
         (await new LeastLoadedEditorPolicy(test.Db).SelectAsync(test.TenantId, CancellationToken.None)).Should().Be("another");
     }
 
+    /// <summary>Verifies exhausted editor capacity leaves the event unacknowledged and unpublished.</summary>
     [Fact]
     public async Task No_capacity_does_not_acknowledge_or_publish()
     {

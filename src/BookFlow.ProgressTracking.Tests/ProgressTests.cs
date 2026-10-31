@@ -6,8 +6,12 @@ using Moq;
 
 namespace BookFlow.ProgressTracking.Tests;
 
+/// <summary>Tests progress behavior.</summary>
 public sealed class ProgressTests
 {
+    /// <summary>Verifies lifecycle events map to the expected manuscript status.</summary>
+    /// <param name="type">The domain event type.</param>
+    /// <param name="expected">The expected manuscript status.</param>
     [Theory]
     [InlineData(EventTypes.Uploaded, ManuscriptStatus.Submitted)]
     [InlineData(EventTypes.Assigned, ManuscriptStatus.AssignedForEditing)]
@@ -16,6 +20,7 @@ public sealed class ProgressTests
     [InlineData(EventTypes.Approved, ManuscriptStatus.Approved)]
     public void Maps_lifecycle_event(string type, ManuscriptStatus expected) => ProgressRules.Map(type).Should().Be(expected);
 
+    /// <summary>Verifies out-of-order history is buffered until contiguous transitions can be projected.</summary>
     [Fact]
     public async Task Buffers_out_of_order_history_and_projects_only_contiguous_transitions()
     {
@@ -34,6 +39,7 @@ public sealed class ProgressTests
         test.Db.History.Should().HaveCount(3);
     }
 
+    /// <summary>Verifies unsupported events are rejected before opening a transaction.</summary>
     [Fact]
     public async Task Rejects_unsupported_event_before_transaction()
     {

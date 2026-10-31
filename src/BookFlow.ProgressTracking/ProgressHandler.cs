@@ -4,8 +4,11 @@ using Microsoft.EntityFrameworkCore;
 
 namespace BookFlow.ProgressTracking;
 
+/// <summary>Maps lifecycle events to statuses and validates allowed progress transitions.</summary>
 public static class ProgressRules
 {
+    /// <summary>Maps a supported lifecycle event type to its manuscript status.</summary>
+    /// <param name="type">The domain event type.</param>
     public static ManuscriptStatus Map(string type) => type switch
     {
         EventTypes.Uploaded => ManuscriptStatus.Submitted,
@@ -16,6 +19,9 @@ public static class ProgressRules
         _ => throw new PermanentFailureException("Unsupported lifecycle event.")
     };
 
+    /// <summary>Determines whether a manuscript progress status transition is allowed.</summary>
+    /// <param name="from">The current manuscript progress status.</param>
+    /// <param name="to">The proposed manuscript progress status.</param>
     public static bool CanTransition(ManuscriptStatus from, ManuscriptStatus to) => (from, to) switch
     {
         (ManuscriptStatus.Submitted, ManuscriptStatus.AssignedForEditing) => true,
@@ -26,10 +32,17 @@ public static class ProgressRules
     };
 }
 
+/// <summary>Records workflow history and projects contiguous manuscript status transitions.</summary>
+/// <param name="db">The publishing workflow database context.</param>
+/// <param name="transaction">The deduplicating consumer transaction service.</param>
 public sealed class ProgressHandler(BookFlowDbContext db, IEventTransaction transaction) : IEventHandler
 {
+    /// <summary>The event consumer name.</summary>
     public string Consumer => "progress-tracking";
 
+    /// <summary>Records the event and advances progress through contiguous valid transitions.</summary>
+    /// <param name="message">The domain event to process.</param>
+    /// <param name="ct">Cancels the operation.</param>
     public Task HandleAsync(DomainEvent message, CancellationToken ct)
     {
         EventLookup.RequireType(message, EventTypes.Subscriptions[Consumer]);

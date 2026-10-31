@@ -8,8 +8,10 @@ using Moq.Protected;
 
 namespace BookFlow.Infrastructure.Tests;
 
+/// <summary>Tests infrastructure behavior.</summary>
 public sealed class InfrastructureTests
 {
+    /// <summary>Verifies file blob store rejects overwrite and path traversal.</summary>
     [Fact]
     public async Task File_blob_store_rejects_overwrite_and_path_traversal()
     {
@@ -28,6 +30,7 @@ public sealed class InfrastructureTests
         finally { if (Directory.Exists(root)) Directory.Delete(root, true); }
     }
 
+    /// <summary>Verifies permanent provider response is not retried.</summary>
     [Fact]
     public async Task Permanent_provider_response_is_not_retried()
     {
@@ -42,6 +45,7 @@ public sealed class InfrastructureTests
         handler.Protected().Verify("SendAsync", Times.Once(), ItExpr.IsAny<HttpRequestMessage>(), ItExpr.IsAny<CancellationToken>());
     }
 
+    /// <summary>Verifies transient provider failure retries with same idempotency key.</summary>
     [Fact]
     public async Task Transient_provider_failure_retries_with_same_idempotency_key()
     {
@@ -66,6 +70,7 @@ public sealed class InfrastructureTests
         keys.Should().Equal("stable-key", "stable-key");
     }
 
+    /// <summary>Verifies consumer transaction deduplicates and rolls back failure.</summary>
     [Fact]
     public async Task Consumer_transaction_deduplicates_and_rolls_back_failure()
     {

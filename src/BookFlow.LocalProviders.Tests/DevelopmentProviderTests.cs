@@ -4,8 +4,10 @@ using Moq;
 
 namespace BookFlow.LocalProviders.Tests;
 
+/// <summary>Tests development provider behavior.</summary>
 public sealed class DevelopmentProviderTests
 {
+    /// <summary>Verifies synthetic provider persists idempotency across instances.</summary>
     [Fact]
     public async Task Synthetic_provider_persists_idempotency_across_instances()
     {
@@ -21,6 +23,7 @@ public sealed class DevelopmentProviderTests
         finally { if (Directory.Exists(root)) Directory.Delete(root, true); }
     }
 
+    /// <summary>Verifies synthetic pdf has valid envelope and dependency can be mocked.</summary>
     [Fact]
     public async Task Synthetic_pdf_has_valid_envelope_and_dependency_can_be_mocked()
     {

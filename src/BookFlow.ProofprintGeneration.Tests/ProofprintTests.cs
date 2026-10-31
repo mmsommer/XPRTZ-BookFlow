@@ -6,8 +6,10 @@ using Moq;
 
 namespace BookFlow.ProofprintGeneration.Tests;
 
+/// <summary>Tests proofprint behavior.</summary>
 public sealed class ProofprintTests
 {
+    /// <summary>Verifies a version's PDF is stored before publication and redelivery is deduplicated.</summary>
     [Fact]
     public async Task Stores_pdf_before_publishing_and_deduplicates_by_version()
     {
@@ -40,6 +42,7 @@ public sealed class ProofprintTests
         provider.Verify(x => x.GenerateProofprintAsync(source, $"proofprint:{version.Id}", It.IsAny<CancellationToken>()), Times.Once);
     }
 
+    /// <summary>Verifies invalid pdf does not create link or event.</summary>
     [Fact]
     public async Task Invalid_pdf_does_not_create_link_or_event()
     {

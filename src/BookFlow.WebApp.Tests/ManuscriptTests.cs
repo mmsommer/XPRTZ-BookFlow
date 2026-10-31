@@ -8,8 +8,10 @@ using Moq;
 
 namespace BookFlow.WebApp.Tests;
 
+/// <summary>Tests manuscript behavior.</summary>
 public sealed class ManuscriptTests
 {
+    /// <summary>Verifies upload retry preserves one version and durable event.</summary>
     [Fact]
     public async Task Upload_retry_preserves_one_version_and_durable_event()
     {
@@ -29,6 +31,7 @@ public sealed class ManuscriptTests
         blobs.Verify(x => x.PutAsync("manuscripts", It.IsAny<string>(), It.IsAny<ReadOnlyMemory<byte>>(), It.IsAny<CancellationToken>()), Times.Once);
     }
 
+    /// <summary>Verifies reusing key with different payload returns conflict.</summary>
     [Fact]
     public async Task Reusing_key_with_different_payload_returns_conflict()
     {
@@ -40,6 +43,7 @@ public sealed class ManuscriptTests
             .Should().ThrowAsync<ConflictException>();
     }
 
+    /// <summary>Verifies failed blob upload leaves recoverable reservation but no domain event.</summary>
     [Fact]
     public async Task Failed_blob_upload_leaves_recoverable_reservation_but_no_domain_event()
     {
@@ -56,6 +60,7 @@ public sealed class ManuscriptTests
         test.Db.Uploads.Should().ContainSingle().Which.State.Should().Be("Pending");
     }
 
+    /// <summary>Verifies pending upload reservation rejects different content.</summary>
     [Fact]
     public async Task Pending_upload_reservation_rejects_different_content()
     {
@@ -85,6 +90,7 @@ public sealed class ManuscriptTests
         blobs.VerifyNoOtherCalls();
     }
 
+    /// <summary>Verifies foreign author cannot read manuscript or download file.</summary>
     [Fact]
     public async Task Foreign_author_cannot_read_manuscript_or_download_file()
     {
@@ -100,6 +106,7 @@ public sealed class ManuscriptTests
         blobs.VerifyNoOtherCalls();
     }
 
+    /// <summary>Verifies book list includes books beyond the manuscript list limit.</summary>
     [Fact]
     public async Task Book_list_includes_books_beyond_the_manuscript_list_limit()
     {
@@ -124,6 +131,7 @@ public sealed class ManuscriptTests
         (await service.BooksAsync(test.Author, CancellationToken.None)).Should().HaveCount(105);
     }
 
+    /// <summary>Verifies version list includes related details for each version.</summary>
     [Fact]
     public async Task Version_list_includes_related_details_for_each_version()
     {
@@ -183,6 +191,7 @@ public sealed class ManuscriptTests
         versions[1].ProofprintId.Should().Be(proofprint.Id);
     }
 
+    /// <summary>Verifies approval requires assigned editor and correct state.</summary>
     [Fact]
     public async Task Approval_requires_assigned_editor_and_correct_state()
     {
@@ -196,6 +205,8 @@ public sealed class ManuscriptTests
         test.Db.PrintOrders.Should().BeEmpty();
     }
 
+    /// <summary>Verifies invalid isbn is rejected.</summary>
+    /// <param name="isbn">The invalid ISBN under test.</param>
     [Theory]
     [InlineData("9780306406158")]
     [InlineData("bad")]

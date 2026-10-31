@@ -6,10 +6,18 @@ using Microsoft.Extensions.Configuration;
 
 namespace BookFlow.Notifications;
 
+/// <summary>Resolves event recipients and schedules deduplicated notification deliveries.</summary>
+/// <param name="db">The publishing workflow database context.</param>
+/// <param name="transaction">The deduplicating consumer transaction service.</param>
+/// <param name="config">The application configuration.</param>
 public sealed class NotificationHandler(BookFlowDbContext db, IEventTransaction transaction, IConfiguration config) : IEventHandler
 {
+    /// <summary>The event consumer name.</summary>
     public string Consumer => "notifications";
 
+    /// <summary>Schedules deduplicated notifications for the event's authorized recipients.</summary>
+    /// <param name="message">The domain event to process.</param>
+    /// <param name="ct">Cancels the operation.</param>
     public Task HandleAsync(DomainEvent message, CancellationToken ct)
     {
         EventLookup.RequireType(message, EventTypes.Notifications);

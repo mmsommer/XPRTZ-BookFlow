@@ -9,6 +9,7 @@ namespace BookFlow.Infrastructure.Migrations
     public partial class InitialBookFlow : Migration
     {
         /// <inheritdoc />
+        /// <param name="migrationBuilder">The builder used to apply the schema operations.</param>
         protected override void Up(MigrationBuilder migrationBuilder)
         {
             migrationBuilder.CreateTable(
@@ -456,6 +457,7 @@ namespace BookFlow.Infrastructure.Migrations
         }
 
         /// <inheritdoc />
+        /// <param name="migrationBuilder">The builder used to apply the schema operations.</param>
         protected override void Down(MigrationBuilder migrationBuilder)
         {
             migrationBuilder.DropTable(

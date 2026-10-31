@@ -8,8 +8,13 @@ using Microsoft.OpenApi;
 
 namespace BookFlow.Infrastructure;
 
+/// <summary>Configures OpenAPI security, operation metadata, and response contracts.</summary>
 public static class ApiDocumentation
 {
+    /// <summary>Registers the BookFlow OpenAPI document and operation transformers.</summary>
+    /// <param name="services">The application's service collection.</param>
+    /// <param name="applicationName">The title used in the OpenAPI document.</param>
+    /// <param name="provider">Whether the document describes development provider operations.</param>
     public static void AddBookFlowOpenApi(this IServiceCollection services, string applicationName, bool provider = false)
     {
         services.AddOpenApi("v1", options =>
@@ -125,6 +130,12 @@ public static class ApiDocumentation
         });
     }
 
+    /// <summary>Adds operation identity, tags, description, and Problem Details response metadata.</summary>
+    /// <param name="endpoint">The endpoint whose OpenAPI metadata is being configured.</param>
+    /// <param name="operationId">The unique OpenAPI operation identifier.</param>
+    /// <param name="tag">The operation's grouping tag.</param>
+    /// <param name="description">The operation's contract description.</param>
+    /// <param name="errors">The documented Problem Details HTTP status codes.</param>
     public static RouteHandlerBuilder Describe(this RouteHandlerBuilder endpoint,
         string operationId, string tag, string description, params int[] errors)
     {
@@ -134,9 +145,14 @@ public static class ApiDocumentation
         return endpoint;
     }
 
+    /// <summary>Marks an endpoint as requiring the configured provider bearer token.</summary>
+    /// <param name="endpoint">The endpoint whose OpenAPI metadata is being configured.</param>
     public static RouteHandlerBuilder ProviderBearer(this RouteHandlerBuilder endpoint) =>
         endpoint.WithMetadata(new ProviderBearerMetadata());
 
+    /// <summary>Adds OpenAPI metadata for a binary file download response.</summary>
+    /// <param name="endpoint">The endpoint whose OpenAPI metadata is being configured.</param>
+    /// <param name="contentType">The file response media type.</param>
     public static RouteHandlerBuilder BinaryResponse(this RouteHandlerBuilder endpoint, string contentType) =>
         endpoint.WithMetadata(new BinaryResponseMetadata(contentType));
 

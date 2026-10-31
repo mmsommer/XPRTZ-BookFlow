@@ -8,6 +8,7 @@ namespace BookFlow.Infrastructure.Migrations
     public partial class AddOutboxLeases : Migration
     {
         /// <inheritdoc />
+        /// <param name="migrationBuilder">The builder used to apply the schema operations.</param>
         protected override void Up(MigrationBuilder migrationBuilder)
         {
             migrationBuilder.AddColumn<string>(
@@ -25,6 +26,7 @@ namespace BookFlow.Infrastructure.Migrations
         }
 
         /// <inheritdoc />
+        /// <param name="migrationBuilder">The builder used to apply the schema operations.</param>
         protected override void Down(MigrationBuilder migrationBuilder)
         {
             migrationBuilder.DropColumn(

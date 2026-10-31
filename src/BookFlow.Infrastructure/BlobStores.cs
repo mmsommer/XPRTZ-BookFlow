@@ -5,8 +5,15 @@ using BookFlow.Core;
 
 namespace BookFlow.Infrastructure;
 
+/// <summary>Stores immutable file content in Azure Blob Storage.</summary>
+/// <param name="client">The Azure Blob Storage service client.</param>
 public sealed class AzureBlobStore(BlobServiceClient client) : IBlobStore
 {
+    /// <summary>Writes file content without overwriting an existing blob.</summary>
+    /// <param name="container">The blob container name.</param>
+    /// <param name="name">The blob name within the container.</param>
+    /// <param name="content">The file bytes to store.</param>
+    /// <param name="ct">Cancels the operation.</param>
     public async Task PutAsync(string container, string name, ReadOnlyMemory<byte> content, CancellationToken ct)
     {
         var blob = client.GetBlobContainerClient(container).GetBlobClient(name);
@@ -22,10 +29,16 @@ public sealed class AzureBlobStore(BlobServiceClient client) : IBlobStore
         }
     }
 
+    /// <summary>Reads the bytes of a stored blob.</summary>
+    /// <param name="container">The blob container name.</param>
+    /// <param name="name">The blob name within the container.</param>
+    /// <param name="ct">Cancels the operation.</param>
     public async Task<byte[]> GetAsync(string container, string name, CancellationToken ct) =>
         (await client.GetBlobContainerClient(container).GetBlobClient(name).DownloadContentAsync(ct)).Value.Content.ToArray();
 }
 
+/// <summary>Stores immutable file content beneath a local directory.</summary>
+/// <param name="root">The local storage root directory.</param>
 public sealed class FileBlobStore(string root) : IBlobStore
 {
     private string Resolve(string container, string name)
@@ -36,6 +49,11 @@ public sealed class FileBlobStore(string root) : IBlobStore
         return Path.Combine(Path.GetFullPath(root), container, name.Replace('/', Path.DirectorySeparatorChar));
     }
 
+    /// <summary>Writes file content without overwriting an existing blob.</summary>
+    /// <param name="container">The blob container name.</param>
+    /// <param name="name">The blob name within the container.</param>
+    /// <param name="content">The file bytes to store.</param>
+    /// <param name="ct">Cancels the operation.</param>
     public async Task PutAsync(string container, string name, ReadOnlyMemory<byte> content, CancellationToken ct)
     {
         var path = Resolve(container, name);
@@ -61,6 +79,10 @@ public sealed class FileBlobStore(string root) : IBlobStore
         }
     }
 
+    /// <summary>Reads the bytes of a stored blob.</summary>
+    /// <param name="container">The blob container name.</param>
+    /// <param name="name">The blob name within the container.</param>
+    /// <param name="ct">Cancels the operation.</param>
     public Task<byte[]> GetAsync(string container, string name, CancellationToken ct) =>
         File.ReadAllBytesAsync(Resolve(container, name), ct);
 }

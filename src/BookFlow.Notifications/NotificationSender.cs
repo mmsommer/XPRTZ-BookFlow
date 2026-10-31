@@ -6,14 +6,23 @@ using Microsoft.EntityFrameworkCore;
 
 namespace BookFlow.Notifications;
 
+/// <summary>Sends the next due notification and persists its delivery outcome.</summary>
 public interface INotificationDeliveryService
 {
+    /// <summary>Leases a due notification and persists its delivery or retry outcome.</summary>
+    /// <param name="ct">Cancels the operation.</param>
     Task SendNextAsync(CancellationToken ct);
 }
 
+/// <summary>Leases due notifications and records provider success, retries, or permanent failure.</summary>
+/// <param name="db">The publishing workflow database context.</param>
+/// <param name="provider">The notification provider used to deliver queued messages.</param>
+/// <param name="logger">The logger for processing and dependency failures.</param>
 public sealed class NotificationDeliveryService(BookFlowDbContext db, INotificationProvider provider,
     ILogger<NotificationDeliveryService> logger) : INotificationDeliveryService
 {
+    /// <summary>Leases a due notification and persists its delivery or retry outcome.</summary>
+    /// <param name="ct">Cancels the operation.</param>
     public async Task SendNextAsync(CancellationToken ct)
     {
         var leaseId = Guid.NewGuid().ToString("N");
@@ -75,8 +84,13 @@ public sealed class NotificationDeliveryService(BookFlowDbContext db, INotificat
     }
 }
 
+/// <summary>Runs queued notification delivery in background service scopes.</summary>
+/// <param name="scopes">The factory for per-operation service scopes.</param>
+/// <param name="logger">The logger for processing and dependency failures.</param>
 public sealed class NotificationSender(IServiceScopeFactory scopes, ILogger<NotificationSender> logger) : BackgroundService
 {
+    /// <summary>Commits the consumer action and inbox acknowledgement once per event.</summary>
+    /// <param name="stoppingToken">Cancels processing when the background service stops.</param>
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         while (!stoppingToken.IsCancellationRequested)

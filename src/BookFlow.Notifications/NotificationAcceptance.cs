@@ -6,13 +6,22 @@ using Microsoft.EntityFrameworkCore;
 
 namespace BookFlow.Notifications;
 
+/// <summary>Durably accepts validated notification event batches.</summary>
 public interface INotificationAcceptance
 {
+    /// <summary>Validates and durably queues a batch of notification events.</summary>
+    /// <param name="messages">The notification events to accept durably.</param>
+    /// <param name="ct">Cancels the operation.</param>
     Task AcceptAsync(DomainEvent[] messages, CancellationToken ct);
 }
 
+/// <summary>Persists validated notification events before recipient resolution.</summary>
+/// <param name="db">The publishing workflow database context.</param>
 public sealed class NotificationAcceptance(BookFlowDbContext db) : INotificationAcceptance
 {
+    /// <summary>Validates and durably queues a batch of notification events.</summary>
+    /// <param name="messages">The notification events to accept durably.</param>
+    /// <param name="ct">Cancels the operation.</param>
     public async Task AcceptAsync(DomainEvent[] messages, CancellationToken ct)
     {
         if (messages.Length is < 1 or > 100)
