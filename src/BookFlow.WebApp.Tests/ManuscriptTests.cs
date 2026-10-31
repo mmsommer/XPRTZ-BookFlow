@@ -94,6 +94,65 @@ public sealed class ManuscriptTests
     }
 
     [Fact]
+    public async Task Version_list_includes_related_details_for_each_version()
+    {
+        using var test = new TestDatabase();
+        var manuscript = test.SeedManuscript();
+        var first = test.Db.Versions.Single();
+        var second = new ManuscriptVersion
+        {
+            Id = Guid.NewGuid(), ManuscriptId = manuscript.Id, Number = 2,
+            ParentId = first.Id, BlobName = "second.bin", CreatedAt = DateTimeOffset.UtcNow
+        };
+        var firstHighlight = new ManuscriptHighlight
+        {
+            Id = Guid.NewGuid(), VersionId = first.Id, StartOffset = 0, EndOffset = 5,
+            OriginalText = "first", EditedText = "edit1"
+        };
+        var secondHighlight = new ManuscriptHighlight
+        {
+            Id = Guid.NewGuid(), VersionId = second.Id, StartOffset = 6, EndOffset = 11,
+            OriginalText = "second", EditedText = "edit2"
+        };
+        var firstFeedback = new AuthorFeedback
+        {
+            Id = Guid.NewGuid(), VersionId = first.Id, AuthorId = test.Author.Id,
+            Comment = "feedback 1", SubmittedAt = DateTimeOffset.UtcNow
+        };
+        var secondFeedback = new AuthorFeedback
+        {
+            Id = Guid.NewGuid(), VersionId = second.Id, AuthorId = test.Author.Id,
+            Comment = "feedback 2", SubmittedAt = DateTimeOffset.UtcNow
+        };
+        var proofprint = new Proofprint
+        {
+            Id = Guid.NewGuid(), VersionId = second.Id, BlobName = "proofprints/second.pdf",
+            CreatedAt = DateTimeOffset.UtcNow
+        };
+        test.Db.Versions.Add(second);
+        test.Db.Highlights.AddRange(firstHighlight, secondHighlight);
+        test.Db.Feedback.AddRange(firstFeedback, secondFeedback);
+        test.Db.Proofprints.Add(proofprint);
+        await test.Db.SaveChangesAsync();
+
+        var service = new ManuscriptService(test.Db, new Mock<IBlobStore>().Object);
+
+        var versions = await service.VersionsAsync(test.Author, manuscript.Id, CancellationToken.None);
+
+        versions.Should().HaveCount(2);
+        versions[0].Id.Should().Be(first.Id);
+        versions[0].Highlights.Should().ContainSingle()
+            .Which.OriginalText.Should().Be("first");
+        versions[0].Feedback.Should().ContainSingle().Which.Should().Be("feedback 1");
+        versions[0].ProofprintId.Should().BeNull();
+        versions[1].Id.Should().Be(second.Id);
+        versions[1].Highlights.Should().ContainSingle()
+            .Which.OriginalText.Should().Be("second");
+        versions[1].Feedback.Should().ContainSingle().Which.Should().Be("feedback 2");
+        versions[1].ProofprintId.Should().Be(proofprint.Id);
+    }
+
+    [Fact]
     public async Task Approval_requires_assigned_editor_and_correct_state()
     {
         using var test = new TestDatabase();

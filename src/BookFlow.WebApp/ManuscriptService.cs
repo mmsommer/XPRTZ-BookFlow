@@ -214,11 +214,27 @@ public sealed class ManuscriptService(BookFlowDbContext db, IBlobStore blobs) : 
     public async Task<IReadOnlyList<VersionResponse>> VersionsAsync(Actor actor, Guid id, CancellationToken ct)
     {
         await AccessibleAsync(actor, id, ct);
-        var versions = await db.Versions.Where(x => x.ManuscriptId == id).OrderBy(x => x.Number).ToListAsync(ct);
-        var result = new List<VersionResponse>();
-        foreach (var version in versions)
-            result.Add(await MapVersionAsync(version, ct));
-        return result;
+        var versions = await db.Versions.AsNoTracking().Where(x => x.ManuscriptId == id)
+            .OrderBy(x => x.Number).ToListAsync(ct);
+        var versionIds = versions.Select(x => x.Id).ToArray();
+        var highlights = await db.Highlights.AsNoTracking().Where(x => versionIds.Contains(x.VersionId))
+            .Select(x => new { x.VersionId, Highlight = new HighlightRequest(x.StartOffset, x.EndOffset, x.OriginalText, x.EditedText) })
+            .ToListAsync(ct);
+        var feedback = await db.Feedback.AsNoTracking().Where(x => versionIds.Contains(x.VersionId))
+            .Select(x => new { x.VersionId, x.Comment }).ToListAsync(ct);
+        var proofprints = await db.Proofprints.AsNoTracking().Where(x => versionIds.Contains(x.VersionId))
+            .Select(x => new { x.VersionId, x.Id }).ToListAsync(ct);
+        var highlightsByVersion = highlights.GroupBy(x => x.VersionId)
+            .ToDictionary(x => x.Key, x => (IReadOnlyList<HighlightRequest>)x.Select(y => y.Highlight).ToArray());
+        var feedbackByVersion = feedback.GroupBy(x => x.VersionId)
+            .ToDictionary(x => x.Key, x => (IReadOnlyList<string>)x.Select(y => y.Comment).ToArray());
+        var proofprintByVersion = proofprints.ToDictionary(x => x.VersionId, x => (Guid?)x.Id);
+
+        return versions.Select(version => new VersionResponse(
+            version.Id, version.Number, version.ParentId, version.CreatedAt,
+            highlightsByVersion.GetValueOrDefault(version.Id) ?? Array.Empty<HighlightRequest>(),
+            feedbackByVersion.GetValueOrDefault(version.Id) ?? Array.Empty<string>(),
+            proofprintByVersion.GetValueOrDefault(version.Id))).ToArray();
     }
 
     public async Task<IReadOnlyList<HistoryResponse>> HistoryAsync(Actor actor, Guid id, CancellationToken ct)
