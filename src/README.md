@@ -130,7 +130,7 @@ All applications generate `/openapi/v1.json` in Development. The frontend's docu
    powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\Rancher-Docker.ps1 compose down
    ```
 
-Only the API frontend and development provider expose host ports, both bound to loopback. Other services communicate on the Compose network. Images use .NET 10 multi-stage builds and run as the non-root `app` user. The `bookflow-data` named volume stores SQLite, immutable blobs and provider idempotency records. A one-shot initializer creates the schema before the applications start.
+Only the API frontend and development provider expose host ports, both bound to loopback. Other services communicate on the Compose network. Images use .NET 10 multi-stage builds and run as the non-root `app` user. The `bookflow-data` named volume stores SQLite, immutable blobs and provider idempotency records. A one-shot initializer creates the schema before the applications start and upgrades retry scheduling fields and indexes in existing volumes.
 
 The stack has been verified on Rancher Desktop's Linux dockerd engine: all images build, all nine applications run as non-root, the smoke workflow and Event Grid validation succeed, OpenAPI loads, and approved manuscript state plus proofprint PDFs survive a WebApp container restart. The verification stack uses a separate Compose project and does not modify Rancher's Kubernetes containers.
 

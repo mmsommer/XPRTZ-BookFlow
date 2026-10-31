@@ -72,9 +72,10 @@ public sealed class OutboxWorker(IServiceScopeFactory scopes, ILogger<OutboxWork
                 await using (var claim = await db.Database.BeginTransactionAsync(IsolationLevel.Serializable, stoppingToken))
                 {
                     var now = DateTimeOffset.UtcNow;
-                    var messages = await db.Outbox.Where(x => !x.Published && !x.DeadLettered &&
-                        x.LeaseUntilUtcTicks < now.UtcTicks).ToListAsync(stoppingToken);
-                    item = messages.FirstOrDefault(x => x.NextAttemptAt is null || x.NextAttemptAt <= now);
+                    item = await db.Outbox.Where(x => !x.Published && !x.DeadLettered &&
+                            x.LeaseUntilUtcTicks < now.UtcTicks &&
+                            (x.NextAttemptAtUtcTicks == null || x.NextAttemptAtUtcTicks <= now.UtcTicks))
+                        .OrderBy(x => x.Id).FirstOrDefaultAsync(stoppingToken);
                     if (item is not null)
                     {
                         item.LeaseId = leaseId;
@@ -97,7 +98,9 @@ public sealed class OutboxWorker(IServiceScopeFactory scopes, ILogger<OutboxWork
                         item.Attempts++;
                         item.FailureCode = ex.GetType().Name;
                         item.DeadLettered = ex is PermanentFailureException || item.Attempts >= 10;
-                        item.NextAttemptAt = DateTimeOffset.UtcNow.AddSeconds(Math.Min(300, Math.Pow(2, item.Attempts)));
+                        var nextAttemptAt = DateTimeOffset.UtcNow.AddSeconds(Math.Min(300, Math.Pow(2, item.Attempts)));
+                        item.NextAttemptAt = nextAttemptAt;
+                        item.NextAttemptAtUtcTicks = nextAttemptAt.UtcTicks;
                         logger.LogError("Outbox failure for {EventId}, attempt {Attempt}, code {Code}, dead letter {DeadLetter}",
                             item.Id, item.Attempts, item.FailureCode, item.DeadLettered);
                     }
@@ -126,9 +129,10 @@ public sealed class LocalEventWorker(IServiceScopeFactory scopes, string consume
             {
                 await using var scope = scopes.CreateAsyncScope();
                 var db = scope.ServiceProvider.GetRequiredService<BookFlowDbContext>();
-                var items = await db.LocalDeliveries.Where(x => x.Consumer == consumer && !x.Completed && !x.DeadLettered)
-                    .OrderBy(x => x.EventId).ToListAsync(stoppingToken);
-                var item = items.FirstOrDefault(x => x.NextAttemptAt is null || x.NextAttemptAt <= DateTimeOffset.UtcNow);
+                var now = DateTimeOffset.UtcNow;
+                var item = await db.LocalDeliveries.Where(x => x.Consumer == consumer && !x.Completed &&
+                        !x.DeadLettered && (x.NextAttemptAtUtcTicks == null || x.NextAttemptAtUtcTicks <= now.UtcTicks))
+                    .OrderBy(x => x.EventId).FirstOrDefaultAsync(stoppingToken);
                 if (item is not null)
                 {
                     eventId = item.EventId;
@@ -150,7 +154,9 @@ public sealed class LocalEventWorker(IServiceScopeFactory scopes, string consume
                     item.Attempts++;
                     item.FailureCode = ex.GetType().Name;
                     item.DeadLettered = ex is PermanentFailureException || item.Attempts >= 10;
-                    item.NextAttemptAt = DateTimeOffset.UtcNow.AddSeconds(Math.Min(300, Math.Pow(2, item.Attempts)));
+                    var nextAttemptAt = DateTimeOffset.UtcNow.AddSeconds(Math.Min(300, Math.Pow(2, item.Attempts)));
+                    item.NextAttemptAt = nextAttemptAt;
+                    item.NextAttemptAtUtcTicks = nextAttemptAt.UtcTicks;
                     await db.SaveChangesAsync(stoppingToken);
                 }
             }

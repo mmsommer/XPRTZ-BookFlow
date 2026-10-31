@@ -82,17 +82,22 @@ public sealed class BookFlowDbContext(DbContextOptions<BookFlowDbContext> option
         model.Entity<InventoryLedgerEntry>().HasOne<Book>().WithMany().HasForeignKey(x => x.BookId);
         model.Entity<OutboxMessage>().Property(x => x.Id).HasMaxLength(128);
         model.Entity<OutboxMessage>().Property(x => x.LeaseId).HasMaxLength(36).IsConcurrencyToken();
-        model.Entity<OutboxMessage>().HasIndex(x => new { x.Published, x.DeadLettered, x.LeaseUntilUtcTicks });
+        model.Entity<OutboxMessage>().HasIndex(x => new
+            { x.Published, x.DeadLettered, x.LeaseUntilUtcTicks, x.NextAttemptAtUtcTicks, x.Id });
         model.Entity<InboxMessage>().HasKey(x => new { x.Consumer, x.EventId });
         model.Entity<InboxMessage>().Property(x => x.Consumer).HasMaxLength(64);
         model.Entity<InboxMessage>().Property(x => x.EventId).HasMaxLength(128);
         model.Entity<LocalDelivery>().HasKey(x => new { x.Consumer, x.EventId });
         model.Entity<LocalDelivery>().Property(x => x.Consumer).HasMaxLength(64);
         model.Entity<LocalDelivery>().Property(x => x.EventId).HasMaxLength(128);
+        model.Entity<LocalDelivery>().HasIndex(x => new
+            { x.Consumer, x.Completed, x.DeadLettered, x.NextAttemptAtUtcTicks, x.EventId });
         model.Entity<IdempotencyRecord>().HasKey(x => x.Key);
         model.Entity<IdempotencyRecord>().Property(x => x.Key).HasMaxLength(300);
         model.Entity<NotificationDelivery>().HasKey(x => x.Key);
         model.Entity<NotificationDelivery>().Property(x => x.Key).HasMaxLength(300);
+        model.Entity<NotificationDelivery>().HasIndex(x => new
+            { x.Sent, x.DeadLettered, x.NextAttemptAtUtcTicks, x.Key });
     }
 }
 

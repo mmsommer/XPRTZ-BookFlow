@@ -17,8 +17,10 @@ public sealed class NotificationDeliveryService(BookFlowDbContext db, INotificat
     public async Task SendNextAsync(CancellationToken ct)
     {
         await using var transaction = await db.Database.BeginTransactionAsync(IsolationLevel.Serializable, ct);
-        var items = await db.NotificationDeliveries.Where(x => !x.Sent && !x.DeadLettered).OrderBy(x => x.Key).ToListAsync(ct);
-        var item = items.FirstOrDefault(x => x.NextAttemptAt is null || x.NextAttemptAt <= DateTimeOffset.UtcNow);
+        var now = DateTimeOffset.UtcNow;
+        var item = await db.NotificationDeliveries.Where(x => !x.Sent && !x.DeadLettered &&
+                (x.NextAttemptAtUtcTicks == null || x.NextAttemptAtUtcTicks <= now.UtcTicks))
+            .OrderBy(x => x.Key).FirstOrDefaultAsync(ct);
         if (item is null)
             return;
         try
@@ -33,7 +35,9 @@ public sealed class NotificationDeliveryService(BookFlowDbContext db, INotificat
             item.Attempts++;
             item.FailureCode = ex.GetType().Name;
             item.DeadLettered = ex is PermanentFailureException || item.Attempts >= 10;
-            item.NextAttemptAt = DateTimeOffset.UtcNow.AddSeconds(Math.Min(300, Math.Pow(2, item.Attempts)));
+            var nextAttemptAt = DateTimeOffset.UtcNow.AddSeconds(Math.Min(300, Math.Pow(2, item.Attempts)));
+            item.NextAttemptAt = nextAttemptAt;
+            item.NextAttemptAtUtcTicks = nextAttemptAt.UtcTicks;
             logger.LogError("Notification {Key} failed: {Code}, attempt {Attempt}, dead letter {DeadLetter}",
                 item.Key, item.FailureCode, item.Attempts, item.DeadLettered);
         }

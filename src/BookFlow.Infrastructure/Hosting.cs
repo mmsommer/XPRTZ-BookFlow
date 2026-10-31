@@ -139,10 +139,74 @@ public static class Hosting
             using var scope = app.Services.CreateScope();
             var db = scope.ServiceProvider.GetRequiredService<BookFlowDbContext>();
             if (app.Configuration["BookFlow:Mode"] == "Local")
+            {
                 await db.Database.EnsureCreatedAsync();
+                await EnsureLocalQueueRetryScheduleAsync(db);
+            }
             else
                 await db.Database.MigrateAsync();
         }
+    }
+
+    private static async Task EnsureLocalQueueRetryScheduleAsync(BookFlowDbContext db)
+    {
+        var connection = db.Database.GetDbConnection();
+        await db.Database.OpenConnectionAsync();
+        try
+        {
+            foreach (var table in new[] { "Outbox", "LocalDeliveries", "NotificationDeliveries" })
+            {
+                var hasColumn = false;
+                await using (var command = connection.CreateCommand())
+                {
+                    command.CommandText = $"PRAGMA table_info(\"{table}\")";
+                    await using var reader = await command.ExecuteReaderAsync();
+                    while (await reader.ReadAsync())
+                    {
+                        if (reader.GetString(1) == "NextAttemptAtUtcTicks")
+                        {
+                            hasColumn = true;
+                            break;
+                        }
+                    }
+                }
+                if (!hasColumn)
+                {
+                    await using var command = connection.CreateCommand();
+                    command.CommandText = $"ALTER TABLE \"{table}\" ADD COLUMN \"NextAttemptAtUtcTicks\" INTEGER NULL";
+                    await command.ExecuteNonQueryAsync();
+                }
+            }
+
+            await db.Database.ExecuteSqlRawAsync(
+                """
+                DROP INDEX IF EXISTS "IX_Outbox_Published_DeadLettered_LeaseUntilUtcTicks";
+                CREATE INDEX IF NOT EXISTS "IX_Outbox_Published_DeadLettered_LeaseUntilUtcTicks_NextAttemptAtUtcTicks_Id"
+                    ON "Outbox" ("Published", "DeadLettered", "LeaseUntilUtcTicks", "NextAttemptAtUtcTicks", "Id");
+                CREATE INDEX IF NOT EXISTS "IX_LocalDeliveries_Consumer_Completed_DeadLettered_NextAttemptAtUtcTicks_EventId"
+                    ON "LocalDeliveries" ("Consumer", "Completed", "DeadLettered", "NextAttemptAtUtcTicks", "EventId");
+                CREATE INDEX IF NOT EXISTS "IX_NotificationDeliveries_Sent_DeadLettered_NextAttemptAtUtcTicks_Key"
+                    ON "NotificationDeliveries" ("Sent", "DeadLettered", "NextAttemptAtUtcTicks", "Key");
+                """);
+        }
+        finally
+        {
+            await db.Database.CloseConnectionAsync();
+        }
+
+        var outboxMessages = await db.Outbox.Where(x => x.NextAttemptAt != null && x.NextAttemptAtUtcTicks == null)
+            .ToListAsync();
+        foreach (var message in outboxMessages)
+            message.NextAttemptAtUtcTicks = message.NextAttemptAt!.Value.UtcTicks;
+        var localDeliveries = await db.LocalDeliveries.Where(x => x.NextAttemptAt != null && x.NextAttemptAtUtcTicks == null)
+            .ToListAsync();
+        foreach (var delivery in localDeliveries)
+            delivery.NextAttemptAtUtcTicks = delivery.NextAttemptAt!.Value.UtcTicks;
+        var notificationDeliveries = await db.NotificationDeliveries.Where(x => x.NextAttemptAt != null && x.NextAttemptAtUtcTicks == null)
+            .ToListAsync();
+        foreach (var delivery in notificationDeliveries)
+            delivery.NextAttemptAtUtcTicks = delivery.NextAttemptAt!.Value.UtcTicks;
+        await db.SaveChangesAsync();
     }
 
     public static Actor GetActor(ClaimsPrincipal principal)

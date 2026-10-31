@@ -147,6 +147,7 @@ public sealed class OutboxMessage
     public bool Published { get; set; }
     public int Attempts { get; set; }
     public DateTimeOffset? NextAttemptAt { get; set; }
+    public long? NextAttemptAtUtcTicks { get; set; }
     public string? FailureCode { get; set; }
     public bool DeadLettered { get; set; }
     public string? LeaseId { get; set; }
@@ -170,6 +171,7 @@ public sealed class LocalDelivery
     public bool DeadLettered { get; set; }
     public string? FailureCode { get; set; }
     public DateTimeOffset? NextAttemptAt { get; set; }
+    public long? NextAttemptAtUtcTicks { get; set; }
 }
 
 public sealed class IdempotencyRecord
@@ -196,4 +198,5 @@ public sealed class NotificationDelivery
     public bool DeadLettered { get; set; }
     public string? FailureCode { get; set; }
     public DateTimeOffset? NextAttemptAt { get; set; }
+    public long? NextAttemptAtUtcTicks { get; set; }
 }

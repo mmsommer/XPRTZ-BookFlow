@@ -71,7 +71,40 @@ public sealed class NotificationTests
         delivery.Attempts.Should().Be(1);
         delivery.FailureCode.Should().Be(nameof(HttpRequestException));
         delivery.NextAttemptAt.Should().NotBeNull();
+        delivery.NextAttemptAtUtcTicks.Should().Be(delivery.NextAttemptAt?.UtcTicks);
         provider.Verify(x => x.SendAsync(message, "notification-key", It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task Sender_selects_due_delivery_after_future_retry_rows()
+    {
+        using var test = new TestDatabase();
+        var future = DateTimeOffset.UtcNow.AddHours(1);
+        for (var i = 0; i < 100; i++)
+        {
+            test.Db.NotificationDeliveries.Add(new NotificationDelivery
+            {
+                Key = $"future-{i:D3}",
+                Payload = JsonSerializer.Serialize(new NotificationMessage("future@example.test", "template", "https://bookflow.test/"), EventJson.Options),
+                NextAttemptAt = future,
+                NextAttemptAtUtcTicks = future.UtcTicks
+            });
+        }
+        var dueMessage = new NotificationMessage("due@example.test", "template", "https://bookflow.test/");
+        test.Db.NotificationDeliveries.Add(new NotificationDelivery
+        {
+            Key = "zz-due",
+            Payload = JsonSerializer.Serialize(dueMessage, EventJson.Options)
+        });
+        await test.Db.SaveChangesAsync();
+
+        var provider = new Mock<INotificationProvider>();
+        var service = new NotificationDeliveryService(test.Db, provider.Object,
+            NullLogger<NotificationDeliveryService>.Instance);
+        await service.SendNextAsync(CancellationToken.None);
+
+        provider.Verify(x => x.SendAsync(dueMessage, "zz-due", It.IsAny<CancellationToken>()), Times.Once);
+        test.Db.NotificationDeliveries.Single(x => x.Key == "zz-due").Sent.Should().BeTrue();
     }
 
     [Fact]

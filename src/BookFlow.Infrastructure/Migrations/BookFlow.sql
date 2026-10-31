@@ -499,3 +499,99 @@ END;
 COMMIT;
 GO
 
+BEGIN TRANSACTION;
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261031162638_AddQueueRetryTicks'
+)
+BEGIN
+    DROP INDEX [IX_Outbox_Published_DeadLettered_LeaseUntilUtcTicks] ON [Outbox];
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261031162638_AddQueueRetryTicks'
+)
+BEGIN
+    ALTER TABLE [Outbox] ADD [NextAttemptAtUtcTicks] bigint NULL;
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261031162638_AddQueueRetryTicks'
+)
+BEGIN
+    ALTER TABLE [NotificationDeliveries] ADD [NextAttemptAtUtcTicks] bigint NULL;
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261031162638_AddQueueRetryTicks'
+)
+BEGIN
+    ALTER TABLE [LocalDeliveries] ADD [NextAttemptAtUtcTicks] bigint NULL;
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261031162638_AddQueueRetryTicks'
+)
+BEGIN
+    UPDATE [Outbox]
+                      SET [NextAttemptAtUtcTicks] =
+                          DATEDIFF_BIG(MILLISECOND, CONVERT(datetime2, '0001-01-01T00:00:00'),
+                              SWITCHOFFSET([NextAttemptAt], '+00:00')) * 10000
+                          + (DATEPART(NANOSECOND, SWITCHOFFSET([NextAttemptAt], '+00:00')) / 100) % 10000
+                      WHERE [NextAttemptAt] IS NOT NULL;
+
+                      UPDATE [LocalDeliveries]
+                      SET [NextAttemptAtUtcTicks] =
+                          DATEDIFF_BIG(MILLISECOND, CONVERT(datetime2, '0001-01-01T00:00:00'),
+                              SWITCHOFFSET([NextAttemptAt], '+00:00')) * 10000
+                          + (DATEPART(NANOSECOND, SWITCHOFFSET([NextAttemptAt], '+00:00')) / 100) % 10000
+                      WHERE [NextAttemptAt] IS NOT NULL;
+
+                      UPDATE [NotificationDeliveries]
+                      SET [NextAttemptAtUtcTicks] =
+                          DATEDIFF_BIG(MILLISECOND, CONVERT(datetime2, '0001-01-01T00:00:00'),
+                              SWITCHOFFSET([NextAttemptAt], '+00:00')) * 10000
+                          + (DATEPART(NANOSECOND, SWITCHOFFSET([NextAttemptAt], '+00:00')) / 100) % 10000
+                      WHERE [NextAttemptAt] IS NOT NULL;
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261031162638_AddQueueRetryTicks'
+)
+BEGIN
+    CREATE INDEX [IX_Outbox_Published_DeadLettered_LeaseUntilUtcTicks_NextAttemptAtUtcTicks_Id] ON [Outbox] ([Published], [DeadLettered], [LeaseUntilUtcTicks], [NextAttemptAtUtcTicks], [Id]);
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261031162638_AddQueueRetryTicks'
+)
+BEGIN
+    CREATE INDEX [IX_NotificationDeliveries_Sent_DeadLettered_NextAttemptAtUtcTicks_Key] ON [NotificationDeliveries] ([Sent], [DeadLettered], [NextAttemptAtUtcTicks], [Key]);
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261031162638_AddQueueRetryTicks'
+)
+BEGIN
+    CREATE INDEX [IX_LocalDeliveries_Consumer_Completed_DeadLettered_NextAttemptAtUtcTicks_EventId] ON [LocalDeliveries] ([Consumer], [Completed], [DeadLettered], [NextAttemptAtUtcTicks], [EventId]);
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261031162638_AddQueueRetryTicks'
+)
+BEGIN
+    INSERT INTO [__EFMigrationsHistory] ([MigrationId], [ProductVersion])
+    VALUES (N'20261031162638_AddQueueRetryTicks', N'10.0.14');
+END;
+
+COMMIT;
+GO
+

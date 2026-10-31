@@ -184,11 +184,16 @@ namespace BookFlow.Infrastructure.Migrations
                     b.Property<DateTimeOffset?>("NextAttemptAt")
                         .HasColumnType("datetimeoffset");
 
+                    b.Property<long?>("NextAttemptAtUtcTicks")
+                        .HasColumnType("bigint");
+
                     b.Property<string>("Payload")
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
 
                     b.HasKey("Consumer", "EventId");
+
+                    b.HasIndex("Consumer", "Completed", "DeadLettered", "NextAttemptAtUtcTicks", "EventId");
 
                     b.ToTable("LocalDeliveries");
                 });
@@ -334,6 +339,9 @@ namespace BookFlow.Infrastructure.Migrations
                     b.Property<DateTimeOffset?>("NextAttemptAt")
                         .HasColumnType("datetimeoffset");
 
+                    b.Property<long?>("NextAttemptAtUtcTicks")
+                        .HasColumnType("bigint");
+
                     b.Property<string>("Payload")
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
@@ -342,6 +350,8 @@ namespace BookFlow.Infrastructure.Migrations
                         .HasColumnType("bit");
 
                     b.HasKey("Key");
+
+                    b.HasIndex("Sent", "DeadLettered", "NextAttemptAtUtcTicks", "Key");
 
                     b.ToTable("NotificationDeliveries");
                 });
@@ -375,6 +385,9 @@ namespace BookFlow.Infrastructure.Migrations
                     b.Property<DateTimeOffset?>("NextAttemptAt")
                         .HasColumnType("datetimeoffset");
 
+                    b.Property<long?>("NextAttemptAtUtcTicks")
+                        .HasColumnType("bigint");
+
                     b.Property<string>("Payload")
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
@@ -384,7 +397,7 @@ namespace BookFlow.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("Published", "DeadLettered", "LeaseUntilUtcTicks");
+                    b.HasIndex("Published", "DeadLettered", "LeaseUntilUtcTicks", "NextAttemptAtUtcTicks", "Id");
 
                     b.ToTable("Outbox");
                 });
