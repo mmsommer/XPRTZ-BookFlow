@@ -215,3 +215,65 @@ flowchart LR
 	Distributor -->|Publishes StockUpdated event| EventGrid
 ```
 
+## Book production and inventory tracking workflow
+
+The PrintOnDemand API publishes a `BooksPrinted` event with the printed quantity. Distributors publish `BooksDistributed`, `BooksSold`, and `StockUpdated` events as books move through their inventory. Event Grid routes these events to the inventory service, which maintains per-title and per-distributor totals for printed, distributed, and sold books, along with current stock, in SQL Database. The Web App reads these figures for availability and reporting.
+
+```mermaid
+flowchart LR
+	PrintOnDemandAPI[PrintOnDemand API] -->|Publishes BooksPrinted quantity| EventGrid
+	Distributor([Distributor]) -->|Publishes BooksDistributed quantity| EventGrid
+	Distributor -->|Publishes BooksSold quantity| EventGrid
+	Distributor -->|Publishes StockUpdated quantity| EventGrid
+
+	subgraph Azure[Microsoft Azure]
+		EventGrid{{Event Grid}}
+		InventoryService[Inventory service]
+		SqlDatabase[(SQL Database)]
+		WebApp[Web App]
+
+		EventGrid -->|Routes production, distribution, sales, and stock events| InventoryService
+		InventoryService -->|Updates book totals and current stock| SqlDatabase
+		WebApp <-->|Reads inventory and sales data| SqlDatabase
+	end
+```
+
+## Low-stock and reprint decision workflow
+
+When a title reaches 10 books in stock, or its stock reaches 0, the distributor publishes a `LowStockAlert` or `StockDepleted` event to Event Grid. Event Grid routes the events to the inventory service to update SQL stock data and to a publisher-notification service that emails the publisher a link to the Web App. The publisher can review availability and choose whether to request extra copies. A print order is created only if the publisher approves; the print-order service then sends the request to PrintOnDemand for delivery to the distributor.
+
+```mermaid
+flowchart LR
+	Distributor([Distributor]) -->|Stock reaches 10 or 0| EventGrid
+
+	subgraph Azure[Microsoft Azure]
+		EventGrid{{Event Grid}}
+		InventoryService[Inventory service]
+		PublisherNotificationService[Publisher notification service]
+		SqlDatabase[(SQL Database)]
+		WebApp[Web App]
+		ReprintDecision{Print extra copies?}
+		PrintOrderService[Print order service]
+
+		EventGrid -->|Routes LowStockAlert and StockDepleted| InventoryService
+		InventoryService -->|Updates stock and availability| SqlDatabase
+		EventGrid -->|Routes stock alert| PublisherNotificationService
+		PublisherNotificationService -->|Looks up publisher and book details| SqlDatabase
+		WebApp <-->|Reads current stock and book details| SqlDatabase
+		WebApp --> ReprintDecision
+		ReprintDecision -->|Yes: stores print order| SqlDatabase
+		ReprintDecision -->|Yes: publishes PrintOrderRequested| EventGrid
+		ReprintDecision -->|No: no print order| NoReprint([No reprint])
+		EventGrid -->|Routes print order| PrintOrderService
+	end
+
+	EmailService[Email service]
+	Publisher([Publisher])
+	PrintOnDemandAPI[PrintOnDemand API]
+	PublisherNotificationService -->|Emails Web App link| EmailService
+	EmailService -->|Delivers stock alert| Publisher
+	Publisher -->|Reviews stock and chooses Yes or No| WebApp
+	PrintOrderService -->|Submits title and quantity| PrintOnDemandAPI
+	PrintOnDemandAPI -->|Delivers extra copies| Distributor
+```
+
