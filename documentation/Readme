@@ -4,13 +4,28 @@ This repository is for the XPRTZ code assignment **XPRTZ Code Opdracht 2025**. T
 
 The brief focuses on managing book and manuscript information, coordinating publishing workflows, integrating with external services reliably, sending real-time updates, and building a scalable system with automated tests.
 
+## Contents
+
+- [Original assignment](#original-assignment)
+- [Class diagram](#class-diagram)
+- [New manuscript upload workflow](#new-manuscript-upload-workflow)
+- [Manuscript proofreading workflow](#manuscript-proofreading-workflow)
+- [Manuscript and publication progress tracking](#manuscript-and-publication-progress-tracking)
+- [Manuscript approval workflow](#manuscript-approval-workflow)
+- [Publisher print order workflow](#publisher-print-order-workflow)
+- [Book production and inventory tracking workflow](#book-production-and-inventory-tracking-workflow)
+- [Low-stock and reprint decision workflow](#low-stock-and-reprint-decision-workflow)
+- [Testing strategy](#testing-strategy)
+- [Private Kubernetes deployment and external ingress](#private-kubernetes-deployment-and-external-ingress)
+- [Reliability and event delivery](#reliability-and-event-delivery)
+
 ## Original assignment
 
 The original assignment PDF is available at [XPRTZ Code Opdracht 2025.pdf](../XPRTZ%20Code%20Opdracht%202025.pdf).
 
 ## Class diagram
 
-The class diagram outlines BookFlow's core domain model. Authors submit manuscripts for editors to review; each manuscript has metadata, version history, highlighted edits, and author feedback. An approved manuscript can become a book published by a publisher, while distributors report book availability through stock records.
+The class diagram shows the main BookFlow entities and their relationships. It covers manuscript review and versioning, proofprints and feedback, publication as a book, and distributor stock records.
 
 ```mermaid
 classDiagram
@@ -48,6 +63,11 @@ classDiagram
 	class ManuscriptVersion {
 		+string Id
 		+int VersionNumber
+		+string BlobUri
+		+DateTime CreatedAt
+	}
+	class Proofprint {
+		+string Id
 		+string BlobUri
 		+DateTime CreatedAt
 	}
@@ -92,6 +112,7 @@ classDiagram
 	Manuscript "1" *-- "1" ManuscriptMetadata : metadata
 	Manuscript "1" *-- "1..*" ManuscriptVersion : versions
 	ManuscriptVersion "1" <-- "0..*" ManuscriptVersion : based on original
+	ManuscriptVersion "1" --> "0..*" Proofprint : generated PDF files
 	ManuscriptMetadata "1" *-- "0..*" ManuscriptHighlight : stores highlights
 	ManuscriptVersion "1" --> "0..*" ManuscriptHighlight : changes in version
 	Author "1" --> "0..*" AuthorFeedback : submits
@@ -106,7 +127,10 @@ classDiagram
 
 ## New manuscript upload workflow
 
-When an author uploads a manuscript, the Web App stores the file in Blob Storage and manages manuscript and user metadata in SQL Database. Blob Storage sends an upload event to Event Grid, which routes it to the editor-assignment and proofprint-generation services. The editor-assignment service assigns an editor, saves the assignment, and publishes an `EditorAssigned` event that Event Grid routes to the email service. The proofprint-generation service submits the manuscript to the PrintOnDemand API; when the proofprint is created, the API publishes a `ProofprintCreated` event to Event Grid. Event Grid routes that event to an editor-notification service, which emails the assigned editor a link to the proofprint.
+1. The Web App stores the manuscript file in Blob Storage and its metadata in SQL Database.
+2. Blob Storage publishes `ManuscriptUploaded` to Event Grid. Event Grid sends the durable work to an Azure Service Bus topic with separate subscriptions for editor assignment and proofprint generation.
+3. The editor-assignment service assigns an editor, saves the assignment, and publishes `EditorAssigned`. Event Grid routes this notification through the API frontend, and the editor-notification service emails the assigned editor.
+4. The proofprint-generation service submits the manuscript to the PrintOnDemand API, stores the returned PDF in Blob Storage, and saves its URI and manuscript-version link in SQL Database. It then publishes `ProofprintCreated`; the proofprint-notification service emails the editor a link to the stored PDF.
 
 ```mermaid
 flowchart LR
@@ -116,18 +140,29 @@ flowchart LR
 		WebApp[Web App]
 		BlobStorage[(Blob Storage)]
 		EventGrid{{Event Grid}}
+		ServiceBusTopic[(Azure Service Bus topic)]
+		EditorAssignmentSubscription[Editor assignment subscription]
+		ProofprintSubscription[Proofprint generation subscription]
 		EditorAssignmentService[Editor assignment service<br/>Assigns an editor]
 		ProofprintService[Proofprint generation service]
+		EditorNotificationService[Editor notification service]
 		ProofprintNotificationService[Proofprint notification service]
 		SqlDatabase[(SQL Database)]
 
 		WebApp -->|Stores manuscript file| BlobStorage
 		BlobStorage -->|Manuscript uploaded event| EventGrid
-		EventGrid -->|Routes upload event| EditorAssignmentService
-		EventGrid -->|Routes upload event| ProofprintService
-		EventGrid -->|Routes ProofprintCreated event| ProofprintNotificationService
+		EventGrid -->|ManuscriptUploaded| ServiceBusTopic
+		ServiceBusTopic --> EditorAssignmentSubscription
+		ServiceBusTopic --> ProofprintSubscription
+		EditorAssignmentSubscription --> EditorAssignmentService
+		ProofprintSubscription --> ProofprintService
+		EventGrid -->|EditorAssigned notification| ApiFrontend
+		EventGrid -->|ProofprintCreated notification| ApiFrontend
 		EditorAssignmentService -->|Persists editor assignment| SqlDatabase
 		EditorAssignmentService -->|Publishes EditorAssigned event| EventGrid
+		ProofprintService -->|Stores generated PDF| BlobStorage
+		ProofprintService -->|Persists proofprint Blob URI and version link| SqlDatabase
+		ProofprintService -->|Publishes ProofprintCreated after storage| EventGrid
 		ProofprintNotificationService -->|Looks up assigned editor and proofprint link| SqlDatabase
 		WebApp <-->|Reads and writes manuscript and user metadata| SqlDatabase
 	end
@@ -135,17 +170,23 @@ flowchart LR
 	EmailService[Email service]
 	Editor([Assigned editor])
 	PrintOnDemandAPI[PrintOnDemand API]
+	ApiFrontend[Secured API frontend]
+	ApiFrontend -->|Forwards notification| EditorNotificationService
+	ApiFrontend -->|Forwards proofprint-ready notification| ProofprintNotificationService
+	EditorNotificationService -->|Sends editor assignment email| EmailService
 	ProofprintNotificationService -->|Sends email with proofprint link| EmailService
-	EventGrid -->|Routes EditorAssigned event| EmailService
 	EmailService -->|Delivers notification| Editor
 	EmailService -->|Delivers proofprint-ready notification| Editor
 	ProofprintService -->|Submits manuscript for proofprint generation| PrintOnDemandAPI
-	PrintOnDemandAPI -->|Publishes ProofprintCreated event| EventGrid
+	PrintOnDemandAPI -->|Returns generated PDF| ProofprintService
 ```
 
 ## Manuscript proofreading workflow
 
-The editor opens the manuscript in the Web App, highlights and edits the text, and saves the result as a new Blob Storage version linked to the original. The Web App stores the highlights and version relationship in SQL Database, then publishes a `ManuscriptEdited` event to Event Grid. Event Grid routes it to an independently deployed author-notification service and a proofprint-generation service. The notification service looks up the author and updated-version link, then sends an email; the proofprint service submits the editor's version to the PrintOnDemand API. When each proofprint is created, the API publishes a `ProofprintCreated` event to Event Grid, which routes it to the editor-notification service so the editor receives an email with the proofprint link. The author follows the link to read the edited manuscript in the Web App, responds to the changes, and uploads a revised version linked to the editor's version. The Web App stores the author's feedback and new version metadata, then publishes a `ManuscriptRevised` event. Event Grid routes that event to an independent editor-notification service and the proofprint-generation service. The notification service emails the editor a link to the revised manuscript, and the proofprint service submits the author's version to the PrintOnDemand API, which publishes another `ProofprintCreated` event when that proofprint is ready; the editor is notified with its link as well.
+1. The editor highlights and edits the manuscript in the Web App. The app stores the edited file as a new Blob Storage version and saves the highlights and version metadata in SQL Database, then publishes `ManuscriptEdited`.
+2. Event Grid sends the proofprint-generation job through Service Bus. The proofprint service submits the edited version to the PrintOnDemand API, stores the returned PDF in Blob Storage, and saves its URI and version link in SQL Database. It publishes `ProofprintCreated` after storage completes.
+3. Event Grid forwards the lightweight author notification through the API frontend. The author receives a Web App link, reviews the edits, and uploads a revised version with feedback. The Web App stores the new version and metadata, then publishes `ManuscriptRevised`.
+4. Event Grid sends the new proofprint job through Service Bus and forwards the editor notification through the API frontend. The proofprint service stores the author's proofprint PDF and its version link; the editor receives links to the revised manuscript and proofprint.
 
 ```mermaid
 flowchart LR
@@ -156,6 +197,7 @@ flowchart LR
 		BlobStorage[(Blob Storage)]
 		SqlDatabase[(SQL Database)]
 		EventGrid{{Event Grid}}
+		ServiceBus[(Azure Service Bus)]
 		AuthorNotificationService[Author notification service]
 		EditorNotificationService[Editor notification service]
 		ProofprintService[Proofprint generation service]
@@ -164,20 +206,27 @@ flowchart LR
 		WebApp -->|Stores edited version linked to original| BlobStorage
 		WebApp -->|Stores highlights and version metadata| SqlDatabase
 		WebApp -->|Publishes ManuscriptEdited event| EventGrid
-		EventGrid -->|Routes ManuscriptEdited event| AuthorNotificationService
-		EventGrid -->|Routes ManuscriptEdited event| ProofprintService
+		EventGrid -->|ManuscriptEdited proofprint work| ServiceBus
+		ServiceBus -->|ManuscriptEdited| ProofprintService
+		EventGrid -->|Author notification| ApiFrontend
+		ApiFrontend -->|Forwards to author notification service| AuthorNotificationService
 		AuthorNotificationService -->|Looks up author and updated-version link| SqlDatabase
 		WebApp -->|Stores author feedback and revised-version metadata| SqlDatabase
 		WebApp -->|Stores revised version linked to editor's version| BlobStorage
 		WebApp -->|Publishes ManuscriptRevised event| EventGrid
-		EventGrid -->|Routes ManuscriptRevised event| EditorNotificationService
-		EventGrid -->|Routes ProofprintCreated event| EditorNotificationService
-		EventGrid -->|Routes ManuscriptRevised event| ProofprintService
+		EventGrid -->|ManuscriptRevised proofprint work| ServiceBus
+		ServiceBus -->|ManuscriptRevised| ProofprintService
+		EventGrid -->|Editor and proofprint-ready notifications| ApiFrontend
+		ApiFrontend -->|Forwards to editor notification service| EditorNotificationService
 		EditorNotificationService -->|Looks up editor and revised-version link| SqlDatabase
+		ProofprintService -->|Stores generated PDFs| BlobStorage
+		ProofprintService -->|Persists proofprint URIs and version links| SqlDatabase
+		ProofprintService -->|Publishes ProofprintCreated after storage| EventGrid
 	end
 
 	EmailService[Email service]
 	PrintOnDemandAPI[PrintOnDemand API]
+	ApiFrontend[Secured API frontend]
 	Author([Author])
 	Editor([Editor])
 	AuthorNotificationService -->|Sends email with Web App link| EmailService
@@ -189,12 +238,12 @@ flowchart LR
 	EditorNotificationService -->|Sends email with proofprint link| EmailService
 	EmailService -->|Delivers proofprint-ready notification| Editor
 	ProofprintService -->|Generates proofprint for edited or revised version| PrintOnDemandAPI
-	PrintOnDemandAPI -->|Publishes ProofprintCreated event| EventGrid
+	PrintOnDemandAPI -->|Returns generated PDF| ProofprintService
 ```
 
 ## Manuscript and publication progress tracking
 
-Lifecycle events track a manuscript from submission through editing, author feedback, editor review, and approval. Event Grid routes `ManuscriptUploaded`, `EditorAssigned`, `ManuscriptEdited`, `ManuscriptRevised`, and `ManuscriptApproved` events to the progress-tracking service. The service updates the manuscript's current status and status history in SQL Database, which the Web App displays to publishers and other authorized users.
+Lifecycle events track a manuscript from submission through editing, author feedback, editor review, and approval. Event Grid routes `ManuscriptUploaded`, `EditorAssigned`, `ManuscriptEdited`, `ManuscriptRevised`, and `ManuscriptApproved` through Service Bus to the progress-tracking service. The service updates the current status and history in SQL Database; the Web App displays that progress to publishers and other authorized users.
 
 ```mermaid
 flowchart LR
@@ -205,13 +254,15 @@ flowchart LR
 		WebApp[Web App]
 		EditorAssignmentService[Editor assignment service]
 		EventGrid{{Event Grid}}
+		ServiceBus[(Azure Service Bus)]
 		ProgressTrackingService[Publication progress service]
 		SqlDatabase[(SQL Database)]
 
 		BlobStorage -->|ManuscriptUploaded| EventGrid
 		EditorAssignmentService -->|EditorAssigned| EventGrid
 		WebApp -->|ManuscriptEdited, ManuscriptRevised, ManuscriptApproved| EventGrid
-		EventGrid -->|Routes lifecycle events| ProgressTrackingService
+		EventGrid -->|ManuscriptUploaded, EditorAssigned, ManuscriptEdited, ManuscriptRevised, ManuscriptApproved| ServiceBus
+		ServiceBus -->|Consumes lifecycle events| ProgressTrackingService
 		ProgressTrackingService -->|Updates current status and history| SqlDatabase
 		WebApp <-->|Reads manuscript status and history| SqlDatabase
 	end
@@ -219,7 +270,13 @@ flowchart LR
 
 ## Manuscript approval workflow
 
-When the editor approves a manuscript in the Web App, the approval status is saved in SQL Database and a `ManuscriptApproved` event is published to Event Grid. Event Grid routes the event to independently deployed services: one submits a print demand to the PrintOnDemand API, one emails the author that the manuscript is approved, and one notifies publisher APIs that the book is available for ordering. This indicates catalog/order availability, not physical distributor stock; delivery and stock updates are tracked separately.
+When the editor approves a manuscript, the Web App saves the approval status and publishes `ManuscriptApproved` to Event Grid. The event triggers three actions:
+
+- Service Bus delivers print-demand work to the print-demand service, which requests printing from the PrintOnDemand API.
+- The API frontend routes an approval email to the author.
+- The API frontend routes an availability notification to publisher APIs.
+
+The publisher notification means the book is available for ordering, not that it is physically in distributor stock. Delivery and stock updates are tracked separately.
 
 ```mermaid
 flowchart LR
@@ -229,21 +286,25 @@ flowchart LR
 		WebApp[Web App]
 		SqlDatabase[(SQL Database)]
 		EventGrid{{Event Grid}}
+		ServiceBus[(Azure Service Bus)]
 		PrintDemandService[Print demand service]
 		AuthorApprovalNotificationService[Author approval notification service]
 		PublisherAvailabilityService[Publisher availability service]
 
 		WebApp -->|Stores approval status| SqlDatabase
 		WebApp -->|Publishes ManuscriptApproved event| EventGrid
-		EventGrid -->|Routes approval event| PrintDemandService
-		EventGrid -->|Routes approval event| AuthorApprovalNotificationService
-		EventGrid -->|Routes approval event| PublisherAvailabilityService
+		EventGrid -->|Print-demand work| ServiceBus
+		ServiceBus -->|ManuscriptApproved| PrintDemandService
+		EventGrid -->|Author and publisher notifications| ApiFrontend
+		ApiFrontend -->|Forwards approval notification| AuthorApprovalNotificationService
+		ApiFrontend -->|Forwards availability notification| PublisherAvailabilityService
 	end
 
 	PrintOnDemandAPI[PrintOnDemand API]
 	EmailService[Email service]
 	PublisherAPIs[Publisher APIs]
 	Author([Author])
+	ApiFrontend[Secured API frontend]
 	PrintDemandService -->|Requests manuscript printing| PrintOnDemandAPI
 	AuthorApprovalNotificationService -->|Sends approval email| EmailService
 	EmailService -->|Delivers approval notification| Author
@@ -252,7 +313,9 @@ flowchart LR
 
 ## Publisher print order workflow
 
-The publisher uses the Web App to check book availability and requests a print quantity for a selected distributor. The Web App records the order and publishes a `PrintOrderRequested` event to Event Grid. Event Grid routes the event to the print-order service, which submits the title and quantity to the PrintOnDemand API. When the books are delivered, PrintOnDemand publishes a `BooksDelivered` event to Event Grid. The distributor then updates its stock and publishes a `StockUpdated` event. Event Grid routes both events to the inventory service, which updates the stock data used by the Web App.
+1. The publisher checks book availability in the Web App and requests a print quantity for a selected distributor.
+2. The Web App stores the order and publishes `PrintOrderRequested`. Event Grid routes it through Service Bus to the print-order service, which submits the title and quantity to the PrintOnDemand API.
+3. PrintOnDemand and the distributor send delivery and stock callbacks through the API frontend. Event Grid routes these updates through Service Bus to the inventory service, which updates stock data used by the Web App.
 
 ```mermaid
 flowchart LR
@@ -262,45 +325,54 @@ flowchart LR
 		WebApp[Web App]
 		SqlDatabase[(SQL Database)]
 		EventGrid{{Event Grid}}
+		ServiceBus[(Azure Service Bus)]
 		PrintOrderService[Print order service]
 		InventoryService[Inventory service]
 
 		WebApp <-->|Reads book availability| SqlDatabase
 		WebApp -->|Stores title, quantity, and distributor| SqlDatabase
 		WebApp -->|Publishes PrintOrderRequested event| EventGrid
-		EventGrid -->|Routes print order event| PrintOrderService
-		EventGrid -->|Routes BooksDelivered and StockUpdated events| InventoryService
+		EventGrid -->|PrintOrderRequested, BooksDelivered, StockUpdated| ServiceBus
+		ServiceBus -->|PrintOrderRequested| PrintOrderService
+		ServiceBus -->|BooksDelivered and StockUpdated| InventoryService
 		InventoryService -->|Updates stock and availability| SqlDatabase
 	end
 
 	PrintOnDemandAPI[PrintOnDemand API]
 	Distributor([Distributor])
+	ApiFrontend[Secured API frontend]
 	PrintOrderService -->|Submits title and quantity to print| PrintOnDemandAPI
 	PrintOnDemandAPI -->|Delivers printed books| Distributor
-	PrintOnDemandAPI -->|Publishes BooksDelivered event| EventGrid
-	Distributor -->|Publishes StockUpdated event| EventGrid
+	PrintOnDemandAPI -->|BooksDelivered callback| ApiFrontend
+	Distributor -->|StockUpdated callback| ApiFrontend
+	ApiFrontend -->|Publishes validated events| EventGrid
 ```
 
 ## Book production and inventory tracking workflow
 
-The PrintOnDemand API publishes a `BooksPrinted` event with the printed quantity. Distributors publish `BooksDistributed`, `BooksSold`, and `StockUpdated` events as books move through their inventory. Event Grid routes these events to the inventory service, which maintains per-title and per-distributor totals for printed, distributed, and sold books, along with current stock, in SQL Database. When a distributor confirms that a title has copies in stock and its listing is open for sale, it publishes a `BookAvailableForSale` event. Event Grid routes that event to an author-notification service, which emails the author a link to the distributor's listing. The Web App reads the inventory figures for availability and reporting.
+PrintOnDemand sends `BooksPrinted` callbacks, and distributors send `BooksDistributed`, `BooksSold`, and `StockUpdated` callbacks through the API frontend to Event Grid. Event Grid routes these inventory updates through Service Bus. The inventory service maintains per-title and per-distributor totals and current stock in SQL Database; the Web App reads this data for availability and reporting.
+
+When a distributor confirms a title is in stock and open for sale, it sends `BookAvailableForSale` through the API frontend. Event Grid routes this lightweight notification through the API frontend to the author-notification service, which emails the author a link to the distributor listing.
 
 ```mermaid
 flowchart LR
-	PrintOnDemandAPI[PrintOnDemand API] -->|Publishes BooksPrinted quantity| EventGrid
-	Distributor([Distributor]) -->|Publishes BooksDistributed quantity| EventGrid
-	Distributor -->|Publishes BooksSold quantity| EventGrid
-	Distributor -->|Publishes StockUpdated quantity| EventGrid
+	PrintOnDemandAPI[PrintOnDemand API] -->|BooksPrinted callback| ApiFrontend
+	Distributor([Distributor]) -->|BooksDistributed, BooksSold, StockUpdated callbacks| ApiFrontend
+	Distributor -->|BookAvailableForSale callback| ApiFrontend
+	ApiFrontend[Secured API frontend] -->|Publishes validated events| EventGrid
 
 	subgraph Azure[Microsoft Azure]
 		EventGrid{{Event Grid}}
+		ServiceBus[(Azure Service Bus)]
 		InventoryService[Inventory service]
 		AuthorAvailabilityService[Author availability notification service]
 		SqlDatabase[(SQL Database)]
 		WebApp[Web App]
 
-		EventGrid -->|Routes production, distribution, sales, and stock events| InventoryService
-		EventGrid -->|Routes BookAvailableForSale| AuthorAvailabilityService
+		EventGrid -->|BooksPrinted, BooksDistributed, BooksSold, StockUpdated inventory work| ServiceBus
+		ServiceBus -->|BooksPrinted, BooksDistributed, BooksSold, StockUpdated| InventoryService
+		EventGrid -->|BookAvailableForSale notification| ApiFrontend
+		ApiFrontend -->|Forwards to author notification service| AuthorAvailabilityService
 		AuthorAvailabilityService -->|Looks up author and sale link| SqlDatabase
 		InventoryService -->|Updates book totals and current stock| SqlDatabase
 		WebApp <-->|Reads inventory and sales data| SqlDatabase
@@ -308,21 +380,27 @@ flowchart LR
 
 	EmailService[Email service]
 	Author([Author])
+	ApiFrontend[Secured API frontend]
 	AuthorAvailabilityService -->|Emails distributor listing link| EmailService
 	EmailService -->|Notifies author book is open for sale| Author
-	Distributor -->|Publishes BookAvailableForSale when stocked and open for sale| EventGrid
 ```
 
 ## Low-stock and reprint decision workflow
 
-When a title reaches 10 books in stock, or its stock reaches 0, the distributor publishes a `LowStockAlert` or `StockDepleted` event to Event Grid. Event Grid routes the events to the inventory service to update SQL stock data and to a publisher-notification service that emails the publisher a link to the Web App. The publisher can review availability and choose whether to request extra copies. A print order is created only if the publisher approves; the print-order service then sends the request to PrintOnDemand for delivery to the distributor.
+When a title reaches 10 books in stock or stock reaches 0, the distributor sends `LowStockAlert` or `StockDepleted` through the API frontend to Event Grid.
+
+- Service Bus routes the durable stock update to the inventory service.
+- The API frontend routes a low-stock email to the publisher, who can review availability in the Web App.
+- If the publisher approves extra copies, the Web App publishes `PrintOrderRequested`. Service Bus routes it to the print-order service, which sends the request to PrintOnDemand for delivery to the distributor.
 
 ```mermaid
 flowchart LR
-	Distributor([Distributor]) -->|Stock reaches 10 or 0| EventGrid
+	Distributor([Distributor]) -->|Stock reaches 10 or 0| ApiFrontend
+	ApiFrontend[Secured API frontend] -->|Publishes validated event| EventGrid
 
 	subgraph Azure[Microsoft Azure]
 		EventGrid{{Event Grid}}
+		ServiceBus[(Azure Service Bus)]
 		InventoryService[Inventory service]
 		PublisherNotificationService[Publisher notification service]
 		SqlDatabase[(SQL Database)]
@@ -330,26 +408,31 @@ flowchart LR
 		ReprintDecision{Print extra copies?}
 		PrintOrderService[Print order service]
 
-		EventGrid -->|Routes LowStockAlert and StockDepleted| InventoryService
+		EventGrid -->|LowStockAlert, StockDepleted, BooksDelivered, PrintOrderRequested| ServiceBus
+		ServiceBus -->|LowStockAlert, StockDepleted, BooksDelivered| InventoryService
 		InventoryService -->|Updates stock and availability| SqlDatabase
-		EventGrid -->|Routes stock alert| PublisherNotificationService
+		EventGrid -->|Publisher stock notification| ApiFrontend
+		ApiFrontend -->|Forwards to publisher notification service| PublisherNotificationService
 		PublisherNotificationService -->|Looks up publisher and book details| SqlDatabase
 		WebApp <-->|Reads current stock and book details| SqlDatabase
 		WebApp --> ReprintDecision
 		ReprintDecision -->|Yes: stores print order| SqlDatabase
 		ReprintDecision -->|Yes: publishes PrintOrderRequested| EventGrid
 		ReprintDecision -->|No: no print order| NoReprint([No reprint])
-		EventGrid -->|Routes print order| PrintOrderService
+		ServiceBus -->|PrintOrderRequested| PrintOrderService
 	end
 
 	EmailService[Email service]
 	Publisher([Publisher])
 	PrintOnDemandAPI[PrintOnDemand API]
+	ApiFrontend[Secured API frontend]
 	PublisherNotificationService -->|Emails Web App link| EmailService
 	EmailService -->|Delivers stock alert| Publisher
 	Publisher -->|Reviews stock and chooses Yes or No| WebApp
 	PrintOrderService -->|Submits title and quantity| PrintOnDemandAPI
 	PrintOnDemandAPI -->|Delivers extra copies| Distributor
+	PrintOnDemandAPI -->|BooksDelivered callback| ApiFrontend
+	ApiFrontend -->|Publishes validated event| EventGrid
 ```
 
 ## Testing strategy
@@ -358,26 +441,44 @@ All application code will be covered by unit tests. Each end-to-end workflow wil
 
 ## Private Kubernetes deployment and external ingress
 
-The BookFlow application services run as containerized .NET workloads inside a private Kubernetes cluster; service pods are not directly reachable from external systems. External users and integrations connect through a secured API frontend. For incoming external events, the frontend authenticates and validates requests, applies rate limits, and publishes accepted events to Event Grid. Event Grid routes events to Azure Service Bus for durable buffering, and private-cluster consumer pods receive and acknowledge messages over a private connection. This keeps pod addresses private while allowing consumers to process events asynchronously and recover from delays.
+BookFlow's containerized .NET services run in a private Kubernetes cluster. Pods are not directly reachable from external systems. External users and integrations connect through a secured API frontend, which authenticates and validates requests, then throttles them with rate limits before publishing accepted events to Event Grid. This throttling is not durable storage; Service Bus provides durable buffering for background work.
 
-To handle peak load, Kubernetes Horizontal Pod Autoscaling (HPA) can increase or decrease service replicas based on CPU, memory, or custom metrics. Event-driven workers can use KEDA with a queue such as Azure Service Bus to scale based on message backlog. Set replica and resource limits to prevent downstream dependencies from being overwhelmed.
+Use a Service Bus topic with a separate subscription per consumer when an event must fan out to multiple services. Use a queue for single-consumer work. Lightweight notifications go from Event Grid to the API frontend over HTTPS, then to private notification services without a Service Bus hop.
+
+Configure Event Grid subscriptions with event-type allowlists so only the work each destination needs is delivered. Use these filters for the current workflows:
+
+| Destination | Event types |
+| --- | --- |
+| Service Bus: editor assignment | `ManuscriptUploaded` |
+| Service Bus: proofprint generation | `ManuscriptUploaded`, `ManuscriptEdited`, `ManuscriptRevised` |
+| Service Bus: print demand and orders | `ManuscriptApproved`, `PrintOrderRequested` |
+| Service Bus: progress tracking | `ManuscriptUploaded`, `EditorAssigned`, `ManuscriptEdited`, `ManuscriptRevised`, `ManuscriptApproved` |
+| Service Bus: inventory | `BooksPrinted`, `BooksDelivered`, `BooksDistributed`, `BooksSold`, `StockUpdated`, `LowStockAlert`, `StockDepleted` |
+| API frontend: notifications | `EditorAssigned`, `ProofprintCreated`, `ManuscriptEdited`, `ManuscriptRevised`, `ManuscriptApproved`, `BookAvailableForSale`, `LowStockAlert`, `StockDepleted` |
+
+Some domain events intentionally have two destinations for different responsibilities. For example, `ManuscriptApproved` enters Service Bus for print demand and is sent to the API frontend for notifications; the notification service is not also subscribed to the bus. Apply each filter at the Event Grid subscription so notification-only deliveries are not enqueued.
+
+To handle peak load, Kubernetes Horizontal Pod Autoscaling (HPA) can increase or decrease service replicas based on CPU, memory, or custom metrics. Event-driven workers can use KEDA with an Azure Service Bus queue or topic subscription to scale based on message backlog. Set replica and resource limits to prevent downstream dependencies from being overwhelmed.
 
 ```mermaid
 flowchart LR
-	ExternalSystems[External systems and users] -->|HTTPS requests and callbacks| ApiFrontend[Secured API frontend<br/>Validate, rate limit, buffer]
+	ExternalSystems[External systems and users] -->|HTTPS requests and callbacks| ApiFrontend[Secured API frontend<br/>Validate and throttle requests]
 	ApiFrontend -->|Publishes accepted events| EventGrid{{Event Grid}}
 
 	subgraph Azure[Azure]
 		EventGrid
-		ServiceBus[(Azure Service Bus queue or topic)]
-		EventGrid -->|Routes events| ServiceBus
+		ServiceBus[(Azure Service Bus queues and topics)]
+		EventGrid -->|Durable background work| ServiceBus
+		EventGrid -->|Lightweight notifications over HTTPS| ApiFrontend
 
 		subgraph PrivateCluster[Private Kubernetes cluster]
 			WebApp[Web App service]
 			BookFlowServices[BookFlow .NET services]
-			EventConsumerPods[.NET event-consumer pods]
+			EventConsumerPods[.NET background consumer pods]
+			NotificationPods[Notification service pods]
 
 			ApiFrontend -->|Proxies authorized app requests| WebApp
+			ApiFrontend -->|Forwards notifications privately| NotificationPods
 			EventConsumerPods -->|Dispatches messages to services| BookFlowServices
 		end
 	end
@@ -387,7 +488,7 @@ flowchart LR
 
 ## Reliability and event delivery
 
-Calls to external systems such as the PrintOnDemand API, email service, and publisher APIs use timeouts and bounded retries with exponential backoff and jitter for transient network errors and timeouts. Do not retry permanent client errors. Use idempotency keys for operations that may have succeeded before a timeout, so retries do not create duplicate print orders or other side effects. Event consumers also deduplicate by event ID and tolerate events arriving out of order.
+Calls to external systems such as the PrintOnDemand API, email service, and publisher APIs use timeouts and bounded retries with exponential backoff and jitter for transient network errors and timeouts. Do not retry permanent client errors. Use idempotency keys when a request may have succeeded before timing out, preventing duplicate print orders or other side effects. Event consumers deduplicate by event ID and tolerate out-of-order delivery.
 
-Azure Event Grid provides at-least-once delivery, not an exactly-once guarantee: failed deliveries are retried according to the subscription policy, and consumers may receive duplicate or out-of-order events. Configure maximum delivery attempts and event time-to-live, and enable a dead-letter destination so events that cannot be delivered can be investigated or replayed. See [Azure Event Grid delivery and retry](https://learn.microsoft.com/en-us/azure/event-grid/delivery-and-retry).
+Azure Event Grid provides at-least-once delivery, not exactly-once delivery. Failed deliveries are retried according to the subscription policy, so consumers may receive duplicate or out-of-order events. Configure maximum delivery attempts and event time-to-live, and enable a dead-letter destination so undelivered events can be investigated or replayed. See [Azure Event Grid delivery and retry](https://learn.microsoft.com/en-us/azure/event-grid/delivery-and-retry).
 
