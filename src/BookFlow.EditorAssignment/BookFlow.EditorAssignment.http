@@ -5,3 +5,6 @@ GET {{baseUrl}}/health/live
 
 ### Database readiness
 GET {{baseUrl}}/health/ready
+
+### Private worker OpenAPI (Development only)
+GET {{baseUrl}}/openapi/v1.json

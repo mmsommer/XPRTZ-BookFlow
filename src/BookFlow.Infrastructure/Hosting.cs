@@ -76,7 +76,7 @@ public static class Hosting
         builder.Services.AddProblemDetails();
         builder.Services.AddExceptionHandler<ApiExceptionHandler>();
         builder.Services.AddValidation();
-        builder.Services.AddOpenApi();
+        builder.Services.AddBookFlowOpenApi(builder.Environment.ApplicationName);
         builder.Services.ConfigureHttpJsonOptions(options =>
         {
             options.SerializerOptions.Converters.Add(new JsonStringEnumConverter());
@@ -126,10 +126,14 @@ public static class Hosting
         app.UseAuthorization();
         if (app.Environment.IsDevelopment())
             app.MapOpenApi();
-        app.MapGet("/health/live", (CancellationToken _) => TypedResults.Ok()).AllowAnonymous();
+        app.MapGet("/health/live", (CancellationToken _) => TypedResults.Ok()).AllowAnonymous()
+            .WithSummary("Check process liveness")
+            .Describe("GetLiveness", "Health", "Unauthenticated process probe. Returns 200 with no response body while the HTTP host is responsive.");
         app.MapGet("/health/ready", async (BookFlowDbContext db, CancellationToken ct) =>
             await db.Database.CanConnectAsync(ct)
-                ? TypedResults.StatusCode(200) : TypedResults.StatusCode(503)).AllowAnonymous();
+                ? TypedResults.StatusCode(200) : TypedResults.StatusCode(503)).AllowAnonymous()
+            .WithSummary("Check database readiness").Produces(200).Produces(503)
+            .Describe("GetReadiness", "Health", "Unauthenticated database-connectivity probe. Returns an empty 200 when SQL is reachable, or an empty 503 when CanConnect reports failure. Unexpected probe exceptions use Problem Details.", 500);
         if (app.Configuration.GetValue<bool>("BookFlow:InitializeDatabase"))
         {
             using var scope = app.Services.CreateScope();

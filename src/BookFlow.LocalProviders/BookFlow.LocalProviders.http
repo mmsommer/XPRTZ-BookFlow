@@ -39,3 +39,7 @@ Content-Type: application/json
 
 ### Liveness
 GET {{baseUrl}}/health/live
+
+### Provider OpenAPI requires the provider token
+GET {{baseUrl}}/openapi/v1.json
+Authorization: Bearer {{providerToken}}

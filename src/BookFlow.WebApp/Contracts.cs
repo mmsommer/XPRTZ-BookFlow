@@ -71,6 +71,9 @@ public sealed record StockResponse(Guid BookId, string DistributorId, int Availa
 /// <summary>Returns participant registration details for tenant administrators.</summary>
 public sealed record ParticipantResponse(string Id, string Name, string Email, string Role, bool Active);
 
+/// <summary>Identifies a participant registration created by an administrator.</summary>
+public sealed record CreateParticipantResponse(string Id);
+
 public interface IManuscriptService
 {
     Task RegisterAsync(Actor actor, CreateParticipantRequest request, CancellationToken ct);

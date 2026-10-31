@@ -16,6 +16,25 @@ function Free-Port {
     try { return $listener.LocalEndpoint.Port }
     finally { $listener.Stop() }
 }
+function Test-OpenApiReferences($node, $document) {
+    if ($null -eq $node) { return }
+    if ($node -is [System.Array]) {
+        foreach ($item in $node) { Test-OpenApiReferences $item $document }
+    }
+    elseif ($node -is [PSCustomObject]) {
+        foreach ($property in $node.PSObject.Properties) {
+            if ($property.Name -eq '$ref' -and $property.Value.StartsWith('#/')) {
+                $target = $document
+                foreach ($part in $property.Value.Substring(2).Split('/')) {
+                    $name = $part.Replace('~1', '/').Replace('~0', '~')
+                    $target = $target.PSObject.Properties[$name].Value
+                    if ($null -eq $target) { throw "Unresolved OpenAPI reference: $($property.Value)" }
+                }
+            }
+            else { Test-OpenApiReferences $property.Value $document }
+        }
+    }
+}
 try {
     New-Item -ItemType Directory -Path $scratch | Out-Null
     if (-not $SkipBuild) {
@@ -88,7 +107,43 @@ try {
         }
         if (-not $ready) { throw "Application $($application.Name) never became responsive." }
     }
-    Invoke-RestMethod "http://localhost:$frontendPort/openapi/v1.json" | Out-Null
+    foreach ($application in $applications) {
+        $headers = @{}
+        if ($application.Name -eq 'LocalProviders') {
+            $headers.Authorization = "Bearer $providerToken"
+        }
+        $document = Invoke-RestMethod "http://localhost:$($application.Port)/openapi/v1.json" -Headers $headers
+        if ($document.openapi -notlike '3.*') { throw "Invalid OpenAPI version: $($application.Name)" }
+        $operationIds = @()
+        foreach ($path in $document.paths.PSObject.Properties) {
+            foreach ($operation in $path.Value.PSObject.Properties | Where-Object { $_.Name -in @('get','post','put','patch','delete') }) {
+                if (-not $operation.Value.operationId -or -not $operation.Value.summary -or
+                    -not $operation.Value.description -or -not $operation.Value.tags) {
+                    throw "Incomplete OpenAPI metadata: $($application.Name) $($operation.Name) $($path.Name)"
+                }
+                $operationIds += $operation.Value.operationId
+                if ($path.Name -notlike '/health/*' -and $path.Name -ne '/' -and -not $operation.Value.security) {
+                    throw "Missing OpenAPI security: $($application.Name) $($path.Name)"
+                }
+            }
+        }
+        if (@($operationIds | Select-Object -Unique).Count -ne $operationIds.Count) {
+            throw "Duplicate OpenAPI operation IDs: $($application.Name)"
+        }
+        Test-OpenApiReferences $document $document
+        if ($application.Name -eq 'ApiFrontend') {
+            if ($operationIds.Count -ne 22 -or $document.paths.PSObject.Properties['/api/{path}']) {
+                throw 'Frontend OpenAPI must contain 22 concrete operations and no wildcard proxy.'
+            }
+            $webhook = $document.paths.PSObject.Properties['/events/notifications'].Value.post
+            $body = $webhook.requestBody.content.PSObject.Properties['application/json'].Value.schema
+            if ($body.items.oneOf.Count -ne 2 -or -not $webhook.responses.PSObject.Properties['200'] -or
+                -not $webhook.responses.PSObject.Properties['202']) {
+                throw 'Webhook OpenAPI must describe both subscription validation and domain notification batches.'
+            }
+        }
+        Write-Output "OpenAPI metadata, security and references verified: $($application.Name) ($($operationIds.Count) operations)."
+    }
     Invoke-WebRequest "http://localhost:$frontendPort/" -UseBasicParsing | Out-Null
     & (Join-Path $src 'Smoke-Test.ps1') -FrontendUrl "http://localhost:$frontendPort" `
         -ProvidersUrl "http://localhost:$providersPort" -ProviderToken $providerToken

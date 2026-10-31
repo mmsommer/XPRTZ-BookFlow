@@ -17,6 +17,7 @@ The brief focuses on managing book and manuscript information, coordinating publ
 - [Low-stock and reprint decision workflow](#low-stock-and-reprint-decision-workflow)
 - [Service implementation specifications](Service-Specifications.md)
 - [Applications and Docker setup](../src/README.md)
+- [OpenAPI and HTTP endpoints](../src/API-Endpoints.md)
 - [Testing strategy](#testing-strategy)
 - [Private Kubernetes deployment and external ingress](#private-kubernetes-deployment-and-external-ingress)
 - [Running locally](#running-locally)

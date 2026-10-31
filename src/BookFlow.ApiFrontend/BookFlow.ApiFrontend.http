@@ -31,3 +31,6 @@ GET {{baseUrl}}/health/live
 
 ### Readiness
 GET {{baseUrl}}/health/ready
+
+### Public OpenAPI including concrete proxied application routes (Development only)
+GET {{baseUrl}}/openapi/v1.json

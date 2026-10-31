@@ -13,3 +13,6 @@ GET {{baseUrl}}/health/live
 
 ### Readiness
 GET {{baseUrl}}/health/ready
+
+### Private generated OpenAPI (Development only)
+GET {{baseUrl}}/openapi/v1.json

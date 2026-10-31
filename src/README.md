@@ -31,6 +31,11 @@ dotnet test .\BookFlow.slnx
 
 The test runner is VSTest with xUnit v2. Tests cover domain rules, mocked integrations, SQLite constraints/transactions, duplicate handling, ordering, failure persistence and the complete upload/edit/revise/approve/print/inventory workflow. They do not claim to reproduce Azure networking or identity.
 
+## OpenAPI and endpoint reference
+
+See [API-Endpoints.md](API-Endpoints.md) for every HTTP endpoint, roles, request semantics, response codes and documentation access.
+All applications generate `/openapi/v1.json` in Development. The frontend's document at <http://localhost:8080/openapi/v1.json> includes the concrete application API routes as well as callback/notification ingress, not the wildcard proxy. The provider document at <http://localhost:8081/openapi/v1.json> requires the provider bearer credential. Private workers document their health probes only. Production documentation remains disabled.
+
 ## Local Docker with Rancher Desktop
 
 1. Start Rancher Desktop and select **dockerd (moby)** under **Preferences > Container Engine**. Wait for the engine to become ready. The `containerd` engine uses nerdctl and cannot run these Docker Compose commands.

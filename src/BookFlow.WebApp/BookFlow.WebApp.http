@@ -101,3 +101,6 @@ GET {{baseUrl}}/health/live
 
 ### Readiness
 GET {{baseUrl}}/health/ready
+
+### Generated OpenAPI (Development only)
+GET {{baseUrl}}/openapi/v1.json
